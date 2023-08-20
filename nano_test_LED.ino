@@ -6,8 +6,8 @@
 
 Adafruit_NeoPixel strip(NUM_PIXELS, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
-int colorIndex = 5;       // Index to track the current color, starting 5 so it begins on red
-bool ledOn = false;       // Flag to track if the LED is on
+int colorIndex = 0;       // Index to track the current color
+bool buttonPressed = false; // Flag to track button press
 
 void setup() {
   strip.begin(); // Initialize the NeoPixel strip
@@ -17,10 +17,16 @@ void setup() {
 
 void loop() {
   // Check if the button is pressed
-  if (digitalRead(BUTTON_PIN) == LOW && !ledOn) {
+  if (digitalRead(BUTTON_PIN) == LOW && !buttonPressed) {
+    buttonPressed = true; // Set button press flag
     colorIndex = (colorIndex + 1) % 6; // Cycle through 6 colors
-    setNeoPixelColorByIndex(colorIndex);
-    flashAndTurnOff();
+    
+    flash(colorIndex); // Flash and turn off
+  }
+
+  // Check if the button is released
+  if (digitalRead(BUTTON_PIN) == HIGH && buttonPressed) {
+    buttonPressed = false; // Reset button press flag
   }
 }
 
@@ -56,18 +62,16 @@ void setColor(int redValue, int greenValue, int blueValue) {
   strip.show();
 }
 
-// Function to turn off the NeoPixel LEDs
-void turnOff() {
-  for (int i = 0; i < NUM_PIXELS; i++) {
-    strip.setPixelColor(i, strip.Color(0, 0, 0));
-  }
-  strip.show();
-}
-
 // Function to flash the NeoPixel strip in the selected color and then turn off
-void flashAndTurnOff() {
-  setNeoPixelColorByIndex(colorIndex); // Set the selected color
-  delay(10); // Flash duration
-  turnOff(); // Turn off the strip
-//   delay(100); // Delay before re-enabling button press
+void flash(int colorIndex) {
+    setNeoPixelColorByIndex(colorIndex);
+
+    // short delay
+    delay(50);
+
+    // turn off strip
+    for (int i = 0; i < NUM_PIXELS; i++) {
+        strip.setPixelColor(i, strip.Color(0, 0, 0));
+    }
+    strip.show();
 }
