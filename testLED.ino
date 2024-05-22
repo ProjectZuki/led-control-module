@@ -1,48 +1,74 @@
+
 #include <Adafruit_NeoPixel.h>
 
-#define LED_PIN     2  // Pin connected to the data input of the RGB LED strip
-#define BUTTON_PIN  3  // Pin connected to the button
-#define NUM_LEDS    8  // Number of LEDs in your strip (adjust as needed)
+#define BUTTON_PIN    2   // define button pin
+#define NEOPIXEL_PIN  6   // define led strip pin (neopixel)
+#define NUM_PIXELS    8   // number of LEDs in strip
+// #define LED_PIN       13
 
-// Create a NeoPixel object for the LED strip
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+// initialize Adafruit NeoPixel library
+Adafruit_NeoPixel strip(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
-// Variable to store the previous button state
-bool buttonWasPressed = false;
+int buttonState = 0;
 
 void setup() {
-  strip.begin();       // Initialize the strip
-  strip.clear();       // Ensure all LEDs are off initially
-  strip.show();        // Apply changes to make sure LEDs are off
-  
-  Serial.begin(9600);  // Start serial communication at 9600 baud rate
-  pinMode(BUTTON_PIN, INPUT_PULLUP); // Configure button with internal pull-up
+  pinMode(BUTTON_PIN, INPUT);
+  // pinMode(LED_PIN, OUTPUT);
+  strip.begin();  // initialize NeoPixel strip
+  strip.show();   // initialize all pixels to 'off'
 }
 
 void loop() {
-  // Read the current state of the button
-  bool buttonPressed = (digitalRead(BUTTON_PIN) == LOW);
+  buttonState = digitalRead(BUTTON_PIN);
+  if (buttonState == HIGH) {
+    // digitalWrite(LED_PIN, HIGH);  // Turn on the LED
 
-  // Check if the button is pressed (transition from HIGH to LOW)
-  if (buttonPressed && !buttonWasPressed) { 
-    Serial.println("Button pressed!");  // Print to Serial Monitor once
+    // Turn on NeoPixel strip
+    for (int i = 0; i < NUM_PIXELS; i++) {
+      strip.setPixelColor(i, 255, 0, 0);  // Set pixel color (red)
+    }
+    strip.show();  // Display the colors
+    delay(10);
+  } else {
+    // digitalWrite(LED_PIN, LOW);  // Turn off the LED
+
+    // Turn off NeoPixel strip
+    for (int i = 0; i < NUM_PIXELS; i++) {
+      strip.setPixelColor(i, 0);  // Set pixel color (off)
+    }
+    strip.show();  // Display the colors
   }
-
-  // Continuous flashing logic
-  // Turn on all LEDs (example: red)
-  for (int i = 0; i < NUM_LEDS; i++) {
-    strip.setPixelColor(i, strip.Color(255, 0, 0)); // Red color
-  }
-  strip.show(); // Apply the changes to light up the strip
-
-  delay(500); // Delay for half a second (controls flashing speed)
-
-  // Turn off all LEDs
-  strip.clear(); // Set all LEDs to black (off)
-  strip.show(); // Apply changes to turn off the strip
-
-  delay(500); // Delay for half a second
-
-  // Update the previous state of the button
-  buttonWasPressed = buttonPressed; // Keep track of the last state
+  delay(10);  // Delay a little bit to improve simulation performance
 }
+
+
+// =============================================================================
+
+// sample code
+
+// #define BUTTON_PIN 2
+// #define LED_PIN 13
+
+// int buttonState = 0;
+
+// void setup()
+// {
+//   pinMode(BUTTON_PIN, INPUT);
+//   pinMode(LED_PIN, OUTPUT);
+// }
+
+// void loop()
+// {
+//   // read the state of the pushbutton value
+//   buttonState = digitalRead(BUTTON_PIN);
+//   // check if pushbutton is pressed.  if it is, the
+//   // buttonState is HIGH
+//   if (buttonState == HIGH) {
+//     // turn LED on
+//     digitalWrite(LED_PIN, HIGH);
+//   } else {
+//     // turn LED off
+//     digitalWrite(LED_PIN, LOW);
+//   }
+//   delay(10); // Delay a little bit to improve simulation performance
+// }
