@@ -1,3 +1,11 @@
+/**
+ * Copyright (C) [Project]Zuki - All Rights Reserved
+ * 
+ * This source code is protected under international copyright law.  All rights
+ * reserved and protected by the copyright holders. For permisssion to use this
+ * source code, please contact the copyright holders.
+ */
+
 #include <IRremote.h>
 
 // IR receiver pin
