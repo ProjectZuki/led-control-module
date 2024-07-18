@@ -28,6 +28,9 @@ int RED = MAX_INTENSITY;
 int GREEN = 0;
 int BLUE = 0;
 
+// stay lit when activated
+bool ledon = false;
+
 // IR
 IRrecv irrecv(IR_RECEIVE_PIN);
 decode_results results;
@@ -51,9 +54,6 @@ void setup() {
 }
 
 void loop() {
-  // stay lit when activated
-  bool lit = false;
-
   // turn on built in LED to confirm functionality
   digitalWrite(LED_BUILTIN, HIGH);
 
@@ -99,8 +99,7 @@ void loop() {
           // play/pause
           case 0x41:
             // reverse lit status
-            lit = !lit;
-            Serial.println("Lit status: " + lit);
+            ledon = !ledon;
             break;
           case 0x40:
             break;
@@ -273,18 +272,21 @@ void loop() {
             flashError(1);
         }
 
-        // flashConfirm();
+        flashConfirm();
   }
 
   // piezo reads analog
   if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {
     // flash LED
     flashRGB();
-  } else {
+  }
+  
+  // check if always on is activated
+  if (!ledon) {
     // Turn off LED
-    // analogWrite(RED_PIN, 0);
-    // analogWrite(GREEN_PIN, 0);
-    // analogWrite(BLUE_PIN, 0);
+    analogWrite(RED_PIN, 0);
+    analogWrite(GREEN_PIN, 0);
+    analogWrite(BLUE_PIN, 0);
   }
   
 }
@@ -320,21 +322,26 @@ void adj_brightness(int& red, int& green, int& blue, int value) {
   int maxComponent = max(red, max(green, blue));
   int minComponent = min(red, min(green, blue));
 
-  // // Calculate the scale factor
-  // float scaleFactor = 1.0 + ((float)value / maxComponent);
+  Serial.println("Current RGB values - RED: " + String(RED) + " GREEN: " + String(GREEN) + " BLUE: " + String(BLUE));
 
-  // // Adjust the color components and ensure they don't go below MIN_BRIGHTNESS
-  // red = constrain(red * scaleFactor, 10, 255);
-  // green = constrain(green * scaleFactor, 10, 255);
-  // blue = constrain(blue * scaleFactor, 10, 255);
+  // If maxComponent is 0, we can't scale, so return early
+  if (maxComponent == 0) return;
 
-  if ((red+value < 255 && red+value > 0) &&
-      (green+value < 255 && green+value > 0) &&
-      (blue+value < 255 && blue+value > 0)) {
-    red += value;
-    green += value;
-    blue += value;
-  }
+  // Calculate the new brightness level
+  int newMaxComponent = maxComponent + value;
+
+  // Ensure newMaxComponent is within the range of 0 to 255
+  newMaxComponent = constrain(newMaxComponent, 0, 255);
+
+  // Calculate the scaling factor
+  float scaleFactor = (float)newMaxComponent / maxComponent;
+
+  // Scale the RGB values
+  red = constrain(red * scaleFactor, 0, 255);
+  green = constrain(green * scaleFactor, 0, 255);
+  blue = constrain(blue * scaleFactor, 0, 255);
+
+  Serial.println("New RGB values - RED: " + String(RED) + " GREEN: " + String(GREEN) + " BLUE: " + String(BLUE));
 }
 
 void rainbow() {
@@ -356,7 +363,7 @@ void rainbow() {
 void flashConfirm() {
   /// TODO: This slows process down, unnecesary
   digitalWrite(LED_BUILTIN, LOW);
-  delay(500);
+  delay(200);
   digitalWrite(LED_BUILTIN, HIGH);
 }
 
