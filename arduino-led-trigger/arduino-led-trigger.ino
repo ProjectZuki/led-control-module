@@ -13,7 +13,7 @@
 #define IR_RECEIVER_PIN 2
 
 // ARGB pin
-#define NUM_LEDS      50
+#define NUM_LEDS      144
 #define LED_PIN       6
 #define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8 / 4 / 2 / 1
 CRGB led[NUM_LEDS];
@@ -342,6 +342,12 @@ int processHexCode(int IRvalue) {
 
       // DIY1
       case 0xC:
+        /// TODO: IrReceiver signal must be valid, else it will stop at any signal
+        // loop until IR signal is received 
+        while (!IrReceiver.decode()) {
+          // create ripple effect
+          ripple();
+        }
         break;
       // DIY2
       case 0xD:
@@ -470,18 +476,38 @@ void adj_brightness(unsigned int& red, unsigned int& green, unsigned int& blue, 
 
 void rainbow() {
   if (RED == MAX_INTENSITY) {
-      RED = 0;
-      GREEN = MAX_INTENSITY;
-      BLUE = 0;
-    } else if (GREEN == MAX_INTENSITY) {
-      RED = 0;
-      BLUE = MAX_INTENSITY;
-      GREEN = 0;
-    } else if (BLUE == MAX_INTENSITY) {
-      RED = MAX_INTENSITY;
-      GREEN = 0;
-      BLUE = 0;
+    RED = 0;
+    GREEN = MAX_INTENSITY;
+    BLUE = 0;
+  } else if (GREEN == MAX_INTENSITY) {
+    RED = 0;
+    BLUE = MAX_INTENSITY;
+    GREEN = 0;
+  } else if (BLUE == MAX_INTENSITY) {
+    RED = MAX_INTENSITY;
+    GREEN = 0;
+    BLUE = 0;
+  }
+}
+
+void ripple() {
+  /// TODO: implement additional trails
+  if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {
+    // Create a single ripple effect with the current color
+    for (int i = 0; i < NUM_LEDS + 25; i++) {   // trail length of 25
+      // Clear only the trailing part of the LED array
+      for (int j = 0; j < NUM_LEDS; j++) {
+        if (j >= i && j < i + 25) {         // trail length of 25
+          led[j] = CRGB(RED, GREEN, BLUE);
+        } else {
+          led[j] = CRGB(0, 0, 0);
+        }
+      }
+
+      FastLED.show();
+      delay(1); // Adjust the delay for the speed of the ripple
     }
+  }
 }
 
 void flashConfirm() {
