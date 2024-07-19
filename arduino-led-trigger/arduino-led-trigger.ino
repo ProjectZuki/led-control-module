@@ -16,12 +16,11 @@
 #define NUM_LEDS      6
 #define LED_PIN       6
 #define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8 / 4 / 2 / 1
-
 CRGB led[NUM_LEDS];
 
 // piezo pin
 #define PIEZO_PIN     A0
-#define PIEZO_THRESH  500
+unsigned int PIEZO_THRESH = 500;
 
 // default RED to 255
 /// TODO: Global -> local variables to save on dynamic memory
@@ -274,6 +273,12 @@ int processHexCode(int IRvalue) {
         break;
       // QUICK
       case 0x17:
+        // increase sensitivity
+        PIEZO_THRESH -= 50;
+        if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
+          PIEZO_THRESH = 10;
+        }
+        Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
         break;
 
       // ==================== row 8 - RED/BLUE/GREEN decrease, SLOW ====================
@@ -289,6 +294,12 @@ int processHexCode(int IRvalue) {
         break;
       // SLOW
       case 0x13:
+        // decrease sensitivity
+        PIEZO_THRESH += 50;
+        if (PIEZO_THRESH >= 1023) {
+          PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
+        }
+        Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
         break;
 
       // ==================== row 9 - DIY 1-3, AUTO ====================================
@@ -392,32 +403,32 @@ void adj_color(unsigned int& color, float scale) {
   Serial.println("Color: " + String(color));
 }
 
-
-
 void adj_brightness(unsigned int& red, unsigned int& green, unsigned int& blue, int value) {
-  /// TODO: scale factor not working
-
-  // Calculate the current maximum value among the RGB components
-  int maxComponent = max(red, max(green, blue));
-  int minComponent = min(red, min(green, blue));
-
-  // If maxComponent is 0, we can't scale, so return early
+  // min brightness to avoid black out (specifically values that weren't previously 0)
+  const unsigned int MIN_BRIGHTNESS = 1;
+  
+  // find max value to scale all componets
+  unsigned int maxComponent = max(red, max(green, blue));
+  
+  // can't scale 0, return
   if (maxComponent == 0) return;
 
-  // Calculate the new brightness level
+  // check for components that were previously 0
+  bool wasZeroRed = (red == 0);
+  bool wasZeroGreen = (green == 0);
+  bool wasZeroBlue = (blue == 0);
+
+  // new value with brightness adjustment, ensure it is in range
   int newMaxComponent = maxComponent + value;
+  newMaxComponent = constrain(newMaxComponent, MIN_BRIGHTNESS, MAX_INTENSITY);
 
-  // Ensure newMaxComponent is within the range of 0 to 255
-  newMaxComponent = constrain(newMaxComponent, 0, MAX_INTENSITY);
-
-  // Calculate the scaling factor
+  // apply scaling factor to non-zero components
   float scaleFactor = (float)newMaxComponent / maxComponent;
-
-  // Scale the RGB values
-  red = constrain(red * scaleFactor, 0, MAX_INTENSITY);
-  green = constrain(green * scaleFactor, 0, MAX_INTENSITY);
-  blue = constrain(blue * scaleFactor, 0, MAX_INTENSITY);
+  red = (wasZeroRed ? 0 : constrain(red * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
+  green = (wasZeroGreen ? 0 : constrain(green * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
+  blue = (wasZeroBlue ? 0 : constrain(blue * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
 }
+
 
 void rainbow() {
   if (RED == MAX_INTENSITY) {
