@@ -10,15 +10,10 @@
 #include <FastLED.h>
 
 // IR receiver pin
-#define IR_RECEIVE_PIN 2
-
-// RGB LED pins
-#define RED_PIN       9
-#define GREEN_PIN     10
-#define BLUE_PIN      11
+#define IR_RECEIVER_PIN 2
 
 // ARGB pin
-#define NUM_LEDS      50
+#define NUM_LEDS      6
 #define LED_PIN       6
 #define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8 / 4 / 2 / 1
 
@@ -30,24 +25,20 @@ CRGB led[NUM_LEDS];
 
 // default RED to 255
 /// TODO: Global -> local variables to save on dynamic memory
-int RED = 0;
-int GREEN = 0;
-int BLUE = MAX_INTENSITY;
+unsigned int RED = 0;
+unsigned int GREEN = 0;
+unsigned int BLUE = MAX_INTENSITY;
  
 // stay lit when activated
 bool ledon = false;
 
 // IR
-IRrecv irrecv(IR_RECEIVE_PIN);
+IRrecv irrecv(IR_RECEIVER_PIN);
 decode_results results;
 
 void setup() {
+  // built-in LED
   pinMode(LED_BUILTIN, OUTPUT);
-
-  // Set RGB LED pins as outputs
-  pinMode(RED_PIN, OUTPUT);
-  pinMode(GREEN_PIN, OUTPUT);
-  pinMode(BLUE_PIN, OUTPUT);
 
   // ARGB
   FastLED.addLeds<NEOPIXEL, LED_PIN>(led, NUM_LEDS);
@@ -63,7 +54,7 @@ void setup() {
 
   // IR
   // Start the receiver, set default feedback LED
-  IrReceiver.begin(IR_RECEIVE_PIN, ENABLE_LED_FEEDBACK);
+  IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
 }
 
 void loop() {
@@ -77,262 +68,47 @@ void loop() {
 
   // IR remote instructions
   if (IrReceiver.decode()) {
-        /*
-         * Print a summary of received data
-         */
-        if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-            Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
-            // We have an unknown protocol here, print extended info
-            IrReceiver.printIRResultRawFormatted(&Serial, true);
-            IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
-            flashError(2);
-        } else {
-            IrReceiver.resume(); // Early enable receiving of the next IR frame
-            IrReceiver.printIRResultShort(&Serial);
-            // IR reciever debug
-            // IrReceiver.printIRSendUsage(&Serial);
-            //
-        }
-        Serial.println();
-
-        /*
-         * process codes
-         */
-        switch(IrReceiver.decodedIRData.command) {
-          // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
-
-          // increase brightness
-          case 0x5C:
-            adj_brightness(RED, GREEN, BLUE, 20);
-            break;
-          // decrease brightness
-          case 0x5D:
-            adj_brightness(RED, GREEN, BLUE, -20);
-            break;
-          // play/pause
-          case 0x41:
-            // reverse lit status
-            ledon = !ledon;
-            Serial.println("We are here!");
-            Serial.println("LED statuus: " + String(ledon));
-            break;
-          case 0x40:
-            break;
-
-          // ==================== row 2 - Color ==========================================
-          case 0x58:
-            // red
-            hexToRGB("#FF0000");
-            break;
-          case 0x59:
-            // green
-            hexToRGB("#00FF00");
-            break;
-          case 0x45:
-            // blue
-            hexToRGB("#0000FF");
-            break;
-          case 0x44:
-            // white
-            hexToRGB("#FFFFFF");
-            break;
-
-          // ==================== row 3 - Color ==========================================
-          case 0x54:
-            // static orange
-            hexToRGB("#FF8000");
-            break;
-          case 0x55:
-            // pea green
-            hexToRGB("#80FF00");
-            break;
-          case 0x49:
-            // static dark blue
-            hexToRGB("#0080FF");
-            break;
-
-          case 0x48:
-            // static pink
-            hexToRGB("#FF80FF");
-            break;
-
-          // ==================== row 4 - Color ==========================================
-          case 0x50:
-            // static dark yellow
-            hexToRGB("#FFD700");
-            break;
-          case 0x51:
-            // static cyan
-            hexToRGB("#00FFFF");
-            break;
-          case 0x4D:
-            // static royal blue
-            hexToRGB("#4169E1");
-            break;
-          case 0x4C:
-            // static light pink
-            hexToRGB("#FFB6C1");
-            break;
-
-          // ==================== row 5 - Color ==========================================
-          case 0x1C:
-            // static yellow
-            hexToRGB("#FFFF00");
-            break;
-          case 0x1D:
-            // static light blue
-            hexToRGB("#ADD8E6");
-            break;
-          case 0x1E:
-            // static light brown
-            hexToRGB("#D2B48C");
-            break;
-            // static green white
-          case 0x1F:
-            hexToRGB("#F0FFF0");
-            break;
-
-          // ==================== row 6 - Color ==========================================
-          case 0x18:
-            // static light yellow
-            hexToRGB("#FFFFE0");
-            break;
-          case 0x19:
-            // static sky blue
-            hexToRGB("#87CEEB");
-            break;
-          case 0x1A:
-            // static violet
-            hexToRGB("#EE82EE");
-            break;
-          case 0x1B:
-            // static blue white
-            hexToRGB("#F0F8FF");
-            break;
-
-          // ==================== row 7 - RED/BLUE/GREEN increase, QUICK ===================
-
-          case 0x14:
-            adj_color(RED, 20);
-          case 0x15:
-            adj_color(GREEN, 20);
-          case 0x16:
-            adj_color(BLUE, 20);
-            break;
-          // QUICK
-          case 0x17:
-            break;
-
-          // ==================== row 8 - RED/BLUE/GREEN decrease, SLOW ====================
-
-          case 0x10:
-            adj_color(RED, -20);
-          case 0x11:
-            adj_color(GREEN, -20);
-          case 0x12:
-            adj_color(BLUE, -20);
-            break;
-          // SLOW
-          case 0x13:
-            break;
-
-          // ==================== row 9 - DIY 1-3, AUTO ====================================
-
-          // DIY1
-          case 0xC:
-            break;
-          // DIY2
-          case 0xD:
-            break;
-          //DIY3
-          case 0xE:
-            break;
-          // AUTO / SAVE
-          case 0xF:
-            break;
-
-          // ==================== row 10 DIY 4-6, FLASH ====================================
-
-          // DIY4
-          case 0x8:
-            break;
-          // DIY5
-          case 0x9:
-            break;
-          // DIY6
-          case 0xA:
-            break;
-          // FLASH
-          case 0xB:
-            break;
-
-          // ==================== row 11 Jump3, Jump7, FADE3, FADE7 ========================
-
-          // JUMP3
-          case 0x4:
-            break;
-          // JUMP7
-          case 0x5:
-            break;
-          // FADE3
-          case 0x6:
-            break;
-          // FADE7
-          case 0x7:
-            break;
-          
-          // Default print error for debug
-          default:
-            Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-            flashError(1);
-        }
-
-        flashConfirm();
-  }
-  /// TODO: continousARGB(); function call causes unknown behavior with IR reader
-
-  if ((analogRead(PIEZO_PIN) > PIEZO_THRESH) || ledon) {
-    continuousARGB();
-    if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {
-      delay(100);
-      offARGB();
+    handleIRInput(IrReceiver.decodedIRData.command);
+    // IR remote instructions
+    int IRval = processHexCode(IrReceiver.decodedIRData.command);
+    if (IRval == -1) {
+      Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+      flashError(1);
     }
   }
-  
-  if (!ledon) {
+
+  // this works fine
+  if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {    // piezo reads analog
+    // flash LED
+    onARGB();
+    delay(100);
     offARGB();
   }
-
-  // if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {    // piezo reads analog
-  //   // flash LED
-  //   continuousARGB();
-  // }
 }
 
-void flashRGB() {
-  // do the thing
-  for (int i = 0; i < NUM_LEDS; i++){
-    led[i] = CRGB(RED, GREEN, BLUE);
+void handleIRInput(int command) {
+  /*
+  * Print a summary of received data
+  */
+
+  /// TODO: Handle long press of IR remote button so that it is only processed as a single input
+  if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
+    Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+    // We have an unknown protocol here, print extended info
+    IrReceiver.printIRResultRawFormatted(&Serial, true);
+    IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+    flashError(2);
+  } else {
+    IrReceiver.resume(); // Early enable receiving of the next IR frame
+    IrReceiver.printIRResultShort(&Serial);
+    // IR reciever debug
+    // IrReceiver.printIRSendUsage(&Serial);
+    //
   }
-
-  FastLED.show();
-
-  // for single LED
-  // analogWrite(RED_PIN, RED);
-  // analogWrite(GREEN_PIN, GREEN);
-  // analogWrite(BLUE_PIN, BLUE);
-
-  delay(100);
-
-  // for single LED
-  // analogWrite(RED_PIN, 0);
-  // analogWrite(GREEN_PIN, 0);
-  // analogWrite(BLUE_PIN, 0);
-
-  offARGB();
+  Serial.println();
 }
 
-void continuousARGB() {
+void onARGB() {
   // do the thing but ARGB
   for (int i = 0; i < NUM_LEDS; i++){
     led[i] = CRGB(RED, GREEN, BLUE);
@@ -347,6 +123,224 @@ void offARGB() {
   }
 
   FastLED.show();
+}
+
+void toggleOnOff() {
+  // toggle on/off for play/pause button
+  onARGB();
+  while (ledon) {
+    if (IrReceiver.decode()) {
+      handleIRInput(IrReceiver.decodedIRData.command);
+      if (IrReceiver.decodedIRData.command == 0x41) {
+        ledon = false;
+        offARGB();
+        break;
+      } else {
+        // apply modifications to color
+        processHexCode(IrReceiver.decodedIRData.command);
+      }
+      // update color in case of change
+      onARGB();
+      IrReceiver.resume();
+    }
+  }
+}
+
+int processHexCode(int IRvalue) {
+      /*
+      * process codes
+      */
+    switch(IRvalue) {
+      // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
+
+      // increase brightness
+      case 0x5C:
+        adj_brightness(RED, GREEN, BLUE, 20);
+        break;
+      // decrease brightness
+      case 0x5D:
+        adj_brightness(RED, GREEN, BLUE, -20);
+        break;
+      // play/pause
+      case 0x41:
+        // reverse lit status
+        ledon = !ledon;
+        toggleOnOff();
+        break;
+      case 0x40:
+        break;
+
+      // ==================== row 2 - Color ==========================================
+      case 0x58:
+        // red
+        hexToRGB("#FF0000");
+        break;
+      case 0x59:
+        // green
+        hexToRGB("#00FF00");
+        break;
+      case 0x45:
+        // blue
+        hexToRGB("#0000FF");
+        break;
+      case 0x44:
+        // white
+        hexToRGB("#FFFFFF");
+        break;
+
+      // ==================== row 3 - Color ==========================================
+      case 0x54:
+        // static orange
+        hexToRGB("#FF8000");
+        break;
+      case 0x55:
+        // pea green
+        hexToRGB("#80FF00");
+        break;
+      case 0x49:
+        // static dark blue
+        hexToRGB("#0080FF");
+        break;
+
+      case 0x48:
+        // static pink
+        hexToRGB("#FF80FF");
+        break;
+
+      // ==================== row 4 - Color ==========================================
+      case 0x50:
+        // static dark yellow
+        hexToRGB("#FFD700");
+        break;
+      case 0x51:
+        // static cyan
+        hexToRGB("#00FFFF");
+        break;
+      case 0x4D:
+        // static royal blue
+        hexToRGB("#4169E1");
+        break;
+      case 0x4C:
+        // static light pink
+        hexToRGB("#FFB6C1");
+        break;
+
+      // ==================== row 5 - Color ==========================================
+      case 0x1C:
+        // static yellow
+        hexToRGB("#FFFF00");
+        break;
+      case 0x1D:
+        // static light blue
+        hexToRGB("#ADD8E6");
+        break;
+      case 0x1E:
+        // static light brown
+        hexToRGB("#D2B48C");
+        break;
+        // static green white
+      case 0x1F:
+        hexToRGB("#F0FFF0");
+        break;
+
+      // ==================== row 6 - Color ==========================================
+      case 0x18:
+        // static light yellow
+        hexToRGB("#FFFFE0");
+        break;
+      case 0x19:
+        // static sky blue
+        hexToRGB("#87CEEB");
+        break;
+      case 0x1A:
+        // static violet
+        hexToRGB("#EE82EE");
+        break;
+      case 0x1B:
+        // static blue white
+        hexToRGB("#F0F8FF");
+        break;
+
+      // ==================== row 7 - RED/BLUE/GREEN increase, QUICK ===================
+
+      case 0x14:
+        adj_color(RED, 1.1);
+        break;
+      case 0x15:
+        adj_color(GREEN, 1.1);
+        break;
+      case 0x16:
+        adj_color(BLUE, 1.1);
+        break;
+      // QUICK
+      case 0x17:
+        break;
+
+      // ==================== row 8 - RED/BLUE/GREEN decrease, SLOW ====================
+
+      case 0x10:
+        adj_color(RED, 0.9);
+        break;
+      case 0x11:
+        adj_color(GREEN, 0.9);
+        break;
+      case 0x12:
+        adj_color(BLUE, 0.9);
+        break;
+      // SLOW
+      case 0x13:
+        break;
+
+      // ==================== row 9 - DIY 1-3, AUTO ====================================
+
+      // DIY1
+      case 0xC:
+        break;
+      // DIY2
+      case 0xD:
+        break;
+      //DIY3
+      case 0xE:
+        break;
+      // AUTO / SAVE
+      case 0xF:
+        break;
+
+      // ==================== row 10 DIY 4-6, FLASH ====================================
+
+      // DIY4
+      case 0x8:
+        break;
+      // DIY5
+      case 0x9:
+        break;
+      // DIY6
+      case 0xA:
+        break;
+      // FLASH
+      case 0xB:
+        break;
+
+      // ==================== row 11 Jump3, Jump7, FADE3, FADE7 ========================
+
+      // JUMP3
+      case 0x4:
+        break;
+      // JUMP7
+      case 0x5:
+        break;
+      // FADE3
+      case 0x6:
+        break;
+      // FADE7
+      case 0x7:
+        break;
+      
+      // Default print error for debug
+      default:
+        return -1;
+    }
+  return IRvalue;
 }
 
 void hexToRGB(String hexCode) {
@@ -365,27 +359,47 @@ void hexToRGB(String hexCode) {
     RED = round(RED * scaleFactor);
     GREEN = round(GREEN * scaleFactor);
     BLUE = round(BLUE * scaleFactor);
-
-    Serial.println("Scale Factor: " + String(scaleFactor));
-  }
-
-  Serial.println("RGB values - RED: " + String(RED) + " GREEN: " + String(GREEN) + " BLUE: " + String(BLUE));
-}
-
-void adj_color(int& color, int value) {
-  if (color+value > 0 && color+value < MAX_INTENSITY) {
-    color += value;
   }
 }
 
-void adj_brightness(int& red, int& green, int& blue, int value) {
-  /// TODO:
+void adj_color(unsigned int& color, float scale) {
+  int newColor;
+  
+  // Use ceil for scaling up and floor for scaling down
+  if (scale > 1) {
+    newColor = ceil(color * scale);
+  } else {
+    newColor = floor(color * scale);
+    if (newColor == 0) {
+      color = 0;
+      return;
+    }
+  }
+
+  // Debug
+  Serial.println("New Color: " + String(newColor));
+
+  // Constrain new color value 
+  if (newColor >= 1 && newColor <= MAX_INTENSITY) {
+    color = newColor;
+  } else if (newColor > MAX_INTENSITY) {
+    color = MAX_INTENSITY;   // Constrain color to max intensity
+  } else if (newColor < 1) {
+    color = 1;    // Constrain color to min intensity
+  }
+
+  // Debug
+  Serial.println("Color: " + String(color));
+}
+
+
+
+void adj_brightness(unsigned int& red, unsigned int& green, unsigned int& blue, int value) {
+  /// TODO: scale factor not working
 
   // Calculate the current maximum value among the RGB components
   int maxComponent = max(red, max(green, blue));
   int minComponent = min(red, min(green, blue));
-
-  Serial.println("Current RGB values - RED: " + String(RED) + " GREEN: " + String(GREEN) + " BLUE: " + String(BLUE));
 
   // If maxComponent is 0, we can't scale, so return early
   if (maxComponent == 0) return;
@@ -403,8 +417,6 @@ void adj_brightness(int& red, int& green, int& blue, int value) {
   red = constrain(red * scaleFactor, 0, MAX_INTENSITY);
   green = constrain(green * scaleFactor, 0, MAX_INTENSITY);
   blue = constrain(blue * scaleFactor, 0, MAX_INTENSITY);
-
-  Serial.println("New RGB values - RED: " + String(RED) + " GREEN: " + String(GREEN) + " BLUE: " + String(BLUE));
 }
 
 void rainbow() {
@@ -437,13 +449,9 @@ void flashError(int errorcode) {
   */
   /// TODO: Modify. Will react with any IR signals (e.g. iPhone Face ID and any other source of IR)
   for (int i = 0; i < errorcode; i++) {
-    analogWrite(RED_PIN, MAX_INTENSITY);
-    analogWrite(GREEN_PIN, 0);
-    analogWrite(BLUE_PIN, 0);
-    delay(100);
-    analogWrite(RED_PIN, 0);
-    analogWrite(GREEN_PIN, 0);
-    analogWrite(BLUE_PIN, 0);
-    delay(100);
+    led[0] = CRGB(255, 0, 0);
+    delay(50);
+    led[0] = CRGB(0, 0, 0);
+    delay(50);
   }
 }
