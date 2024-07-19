@@ -44,17 +44,20 @@ arduino-cli lib install "Adafruit NeoPixel@>=1.12.3"
 
 ## License
 
-See [Priprietary License](Proprietary.pm)
+### Proprietary License
 
-Proprietary License
+This repository and its contents are proprietary to **[Project]Zuki**. All intellectual property rights are reserved.
 
-This repository and its contents are proprietary to [[Project]Zuki](https://github.com/ProjectZuki).
+You are not permitted to redistribute, modify, or use this code in any form without explicit written permission from **[Project]Zuki**.
 
-You are not allowed to redistribute or modify this code without explicit permission from [[Project]Zuki](https://github.com/ProjectZuki).
+For licensing inquiries or permissions, please contact **[Project]Zuki** at [willie.alcaraz@gmail.com](mailto:willie.alcaraz@gmail.com).
 
-For licensing inquiries or permissions, please contact [[Project]Zuki](mailto:willie.alcaraz@gmail.com).
+The full details of this license can be found in the [LICENSE.pm](lib/Software/License/LICENSE.pm) file.
 
-Copyright ©2024 **[Project]Zuki**.
+For more information about **[Project]Zuki** and other projects, visit my website: [williealcaraz.dev](https://williealcaraz.dev).
+
+Copyright **©2024 [Project]Zuki**.
+
 
 
 ## Contact
@@ -63,3 +66,5 @@ For inquiries regarding this project, please provide your contact information.
 
 [Email](mailto:willie.alcaraz@gmail.com?subject=Github%20|%20arduino-db%20Project%20Inquiry) | 
 [Github](https://github.com/ProjectZuki)
+
+[Project]Zuki
