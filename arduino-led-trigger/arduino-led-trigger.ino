@@ -13,9 +13,9 @@
 #define IR_RECEIVER_PIN 2
 
 // ARGB pin
-#define NUM_LEDS      6
+#define NUM_LEDS      50
 #define LED_PIN       6
-#define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8 / 4 / 2 / 1
+#define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8 / 4 / 2 / 1
 CRGB led[NUM_LEDS];
 
 // piezo pin
@@ -34,6 +34,12 @@ bool ledon = false;
 // IR
 IRrecv irrecv(IR_RECEIVER_PIN);
 decode_results results;
+
+// modifier tied to PWR button
+bool modifier = false;
+
+// delay threshold for flash duration
+int delayThreshold = 100;
 
 void setup() {
   // built-in LED
@@ -67,6 +73,7 @@ void loop() {
 
   // IR remote instructions
   if (IrReceiver.decode()) {
+    delay(1000); // delay to prevent multiple inputs
     handleIRInput(IrReceiver.decodedIRData.command);
     // IR remote instructions
     int IRval = processHexCode(IrReceiver.decodedIRData.command);
@@ -80,7 +87,7 @@ void loop() {
   if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {    // piezo reads analog
     // flash LED
     onARGB();
-    delay(100);
+    delay(delayThreshold);
     offARGB();
   }
 }
@@ -90,7 +97,6 @@ void handleIRInput(int command) {
   * Print a summary of received data
   */
 
-  /// TODO: Handle long press of IR remote button so that it is only processed as a single input
   if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
     Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
     // We have an unknown protocol here, print extended info
@@ -166,7 +172,19 @@ int processHexCode(int IRvalue) {
         ledon = !ledon;
         toggleOnOff();
         break;
+      // PWR
       case 0x40:
+        if (!modifier) {
+          modifier = true;    // trigger alt modifier for next input
+          led[0] = CRGB(0, 0, MAX_INTENSITY);
+          FastLED.show();
+          Serial.println("Modifier ON");
+        } else {
+          modifier = false;
+          led[0] = CRGB(0, 0, 0);
+          FastLED.show();
+          Serial.println("Modifier OFF");
+        }
         break;
 
       // ==================== row 2 - Color ==========================================
@@ -273,12 +291,21 @@ int processHexCode(int IRvalue) {
         break;
       // QUICK
       case 0x17:
-        // increase sensitivity
-        PIEZO_THRESH -= 50;
-        if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
-          PIEZO_THRESH = 10;
+        if (!modifier) {
+          // increase sensitivity
+          PIEZO_THRESH -= 50;
+          if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
+            PIEZO_THRESH = 10;
+          }
+          Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
+        } else {
+          modifier = false;
+          // decrease delay (quicker flash)
+          delayThreshold -= 50;
+          led[0] = CRGB(0, 0, 0);
+          FastLED.show();
+          Serial.println("delayThreshold: " + String(delayThreshold));
         }
-        Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
         break;
 
       // ==================== row 8 - RED/BLUE/GREEN decrease, SLOW ====================
@@ -294,12 +321,21 @@ int processHexCode(int IRvalue) {
         break;
       // SLOW
       case 0x13:
-        // decrease sensitivity
-        PIEZO_THRESH += 50;
-        if (PIEZO_THRESH >= 1023) {
-          PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
+        if (!modifier) {
+          // decrease sensitivity
+          PIEZO_THRESH += 50;
+          if (PIEZO_THRESH >= 1023) {
+            PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
+          }
+          Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
+        } else {
+          modifier = false;
+          // increase delay (slower flash)
+          delayThreshold += 50;
+          led[0] = CRGB(0, 0, 0);
+          FastLED.show();
+          Serial.println("delayThreshold: " + String(delayThreshold));
         }
-        Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
         break;
 
       // ==================== row 9 - DIY 1-3, AUTO ====================================
@@ -349,6 +385,8 @@ int processHexCode(int IRvalue) {
       
       // Default print error for debug
       default:
+      Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
+      flashError(2);
         return -1;
     }
   return IRvalue;
@@ -460,9 +498,10 @@ void flashError(int errorcode) {
   */
   /// TODO: Modify. Will react with any IR signals (e.g. iPhone Face ID and any other source of IR)
   for (int i = 0; i < errorcode; i++) {
-    led[0] = CRGB(255, 0, 0);
+    led[0] = CRGB(MAX_INTENSITY, 0, 0);
+    FastLED.show();
     delay(50);
     led[0] = CRGB(0, 0, 0);
-    delay(50);
+    FastLED.show();
   }
 }
