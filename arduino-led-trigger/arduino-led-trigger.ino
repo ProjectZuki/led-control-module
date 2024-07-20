@@ -6,6 +6,11 @@
  * source code, please contact the copyright holders.
  */
 
+
+/**
+ * TODO: Feature: Add a method to program LED color switch
+ */
+
 #include <IRremote.h>
 #include <FastLED.h>
 
@@ -37,9 +42,22 @@ decode_results results;
 
 // modifier tied to PWR button
 bool modifier = false;
+// IR lock
+bool IR_lock = false;
 
 // delay threshold for flash duration
 int delayThreshold = 100;
+
+// For trail ripple effect
+const int TRAIL_LENGTH = 25;
+const int TRAIL_MAX = 10;  // Maximum number of simultaneous trails
+
+struct Trail {
+  int position;
+  bool active;
+};
+
+Trail trails[TRAIL_MAX];
 
 void setup() {
   // built-in LED
@@ -60,6 +78,12 @@ void setup() {
   // IR
   // Start the receiver, set default feedback LED
   IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
+
+  // Initialize all trails as inactive
+  for (int i = 0; i < TRAIL_MAX; i++) {
+    trails[i].active = false;
+    trails[i].position = -1; // Set initial position to -1
+  }
 }
 
 void loop() {
@@ -73,14 +97,24 @@ void loop() {
 
   // IR remote instructions
   if (IrReceiver.decode()) {
-    delay(1000); // delay to prevent multiple inputs
-    handleIRInput(IrReceiver.decodedIRData.command);
-    // IR remote instructions
-    int IRval = processHexCode(IrReceiver.decodedIRData.command);
-    if (IRval == -1) {
-      Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-      flashError(1);
+
+    // handle, sanitize IR input
+    if (IR_lock) {
+      // IR lock enabled, ignore all inputs
+      irlock();
+      
+    } else {
+      // IR lock disabled, process inputs
+      if (handleIRInput(IrReceiver.decodedIRData.command)) {
+        // IR remote instructions
+        int IRval = processHexCode(IrReceiver.decodedIRData.command);
+        if (IRval == -1) {
+          Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+          flashError(1);
+        }
+      }
     }
+    delay(1000); // delay to prevent multiple inputs
   }
 
   // this works fine
@@ -92,7 +126,47 @@ void loop() {
   }
 }
 
-void handleIRInput(int command) {
+void irlock() {
+  unsigned long previousMillis = 0;
+  const long interval = 200; // interval for LED indicator
+  bool ledState = false;
+
+  while (IR_lock) {
+    unsigned long currentMillis = millis();
+
+    // built-in LED will indicate lock state
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+      ledState = !ledState;
+      digitalWrite(LED_BUILTIN, ledState ? HIGH : LOW);
+    }
+
+    // check IR signal for unlock
+    /// TODO: Maybe have 0x40 input again to modify, then lock to prevent accidentally doing more than intended
+    if (IrReceiver.decode()) {
+      if (IrReceiver.decodedIRData.command == 0xF) {
+        IR_lock = false; // Unlock IR signal
+        Serial.println("IR unlocked");
+      }
+      IrReceiver.resume(); // Prepare to receive the next IR signal
+    }
+
+    // Check the piezo sensor
+    if (analogRead(PIEZO_PIN) > PIEZO_THRESH) { // Piezo reads analog
+      // Flash LED
+      onARGB();
+      delay(delayThreshold);
+      offARGB();
+    }
+  }
+
+  // Ensure the built-in LED is turned off when unlocked
+  digitalWrite(LED_BUILTIN, LOW);
+}
+
+
+
+bool handleIRInput(int command) {
   /*
   * Print a summary of received data
   */
@@ -102,7 +176,8 @@ void handleIRInput(int command) {
     // We have an unknown protocol here, print extended info
     IrReceiver.printIRResultRawFormatted(&Serial, true);
     IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
-    flashError(2);
+    // flashError(2);
+    return false;
   } else {
     IrReceiver.resume(); // Early enable receiving of the next IR frame
     IrReceiver.printIRResultShort(&Serial);
@@ -111,6 +186,7 @@ void handleIRInput(int command) {
     //
   }
   Serial.println();
+  return true;
 }
 
 void onARGB() {
@@ -289,7 +365,7 @@ int processHexCode(int IRvalue) {
       case 0x16:
         adj_color(BLUE, 1.1);
         break;
-      // QUICK
+      // QUICK | Sensitivity down
       case 0x17:
         if (!modifier) {
           // increase sensitivity
@@ -319,7 +395,7 @@ int processHexCode(int IRvalue) {
       case 0x12:
         adj_color(BLUE, 0.9);
         break;
-      // SLOW
+      // SLOW | Sensitivity up
       case 0x13:
         if (!modifier) {
           // decrease sensitivity
@@ -355,8 +431,17 @@ int processHexCode(int IRvalue) {
       //DIY3
       case 0xE:
         break;
-      // AUTO / SAVE
+      // AUTO(save) | IR lock
       case 0xF:
+        if (!modifier) {
+          // save current color
+
+        } else {
+          modifier = false;
+          // lock IR signal
+          IR_lock = true;
+          Serial.println("IR locked");
+        }
         break;
 
       // ==================== row 10 DIY 4-6, FLASH ====================================
@@ -491,23 +576,53 @@ void rainbow() {
 }
 
 void ripple() {
-  /// TODO: implement additional trails
-  if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {
-    // Create a single ripple effect with the current color
-    for (int i = 0; i < NUM_LEDS + 25; i++) {   // trail length of 25
-      // Clear only the trailing part of the LED array
-      for (int j = 0; j < NUM_LEDS; j++) {
-        if (j >= i && j < i + 25) {         // trail length of 25
-          led[j] = CRGB(RED, GREEN, BLUE);
-        } else {
-          led[j] = CRGB(0, 0, 0);
-        }
-      }
+  // Read the piezo value
+  int piezoValue = analogRead(PIEZO_PIN);
 
-      FastLED.show();
-      delay(1); // Adjust the delay for the speed of the ripple
+  if (piezoValue > PIEZO_THRESH) {
+    // Add a new trail if there is room
+    for (int i = 0; i < TRAIL_MAX; i++) {
+      if (!trails[i].active) {
+        trails[i].position = 0;  // Initialize new trail position at the beginning
+        trails[i].active = true;
+        break;
+      }
     }
   }
+
+  // Clear the LED array for each frame
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+  
+  // Update and display the trails
+  for (int t = 0; t < TRAIL_MAX; t++) {
+    if (trails[t].active) {
+      // Draw the current trail with a gap
+      for (int j = 0; j < TRAIL_LENGTH; j++) {
+        int pos = trails[t].position - j;
+        if (pos >= 0 && pos < NUM_LEDS) {
+          led[pos] = CRGB(RED, GREEN, BLUE);
+        }
+      }
+      
+      // Clear the LED just before the trail to create a gap
+      int gapPos = trails[t].position - TRAIL_LENGTH;
+      if (gapPos >= 0 && gapPos < NUM_LEDS) {
+        led[gapPos] = CRGB(0, 0, 0);
+      }
+      
+      // Update the position for the next frame
+      trails[t].position++;
+
+      // Deactivate the trail if it has moved past the LED strip
+      if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH + 1) { // Add 1 for the gap
+        trails[t].active = false;
+        trails[t].position = -1; // Reset position
+      }
+    }
+  }
+
+  FastLED.show();
+  delay(1); // Adjust the delay for the speed of the ripple
 }
 
 void flashConfirm() {
