@@ -11,29 +11,35 @@
  * TODO: Feature: Add a method to program LED color switch
  */
 
-#include <IRremote.h>
-#include <FastLED.h>
+#include <IRremote.h>   // IR remote
+#include <FastLED.h>    // NeoPixel ARGB
+#include <EEPROM.h>     // save ROM data durong off state
 
 // IR receiver pin
 #define IR_RECEIVER_PIN 2
 
 // ARGB pin
-#define NUM_LEDS      144
+#define NUM_LEDS      30
 #define LED_PIN       6
 #define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8 / 4 / 2 / 1
 CRGB led[NUM_LEDS];
 
-// piezo pin
-#define PIEZO_PIN     A0
-unsigned int PIEZO_THRESH = 500;
+// EEPROM address
+#define RED_ADDR 0
+#define GREEN_ADDR 1
+#define BLUE_ADDR 2
 
 // default RED to 255
 /// TODO: Global -> local variables to save on dynamic memory
 unsigned int RED = 0;
 unsigned int GREEN = 0;
 unsigned int BLUE = MAX_INTENSITY;
+
+// piezo pin
+#define PIEZO_PIN     A0
+unsigned int PIEZO_THRESH = 500;
  
-// stay lit when activated
+// always on mode
 bool ledon = false;
 
 // IR
@@ -95,6 +101,9 @@ void loop() {
   // delay(2);
   //
 
+  // restore color values
+  eeprom_read(RED, GREEN, BLUE);
+
   // IR remote instructions
   if (IrReceiver.decode()) {
 
@@ -126,6 +135,20 @@ void loop() {
   }
 }
 
+void eeprom_read(int red, int green, int blue) {
+  // read from EEPROM
+  RED = EEPROM.read(RED_ADDR);
+  GREEN = EEPROM.read(GREEN_ADDR);
+  BLUE = EEPROM.read(BLUE_ADDR);
+}
+
+void eeprom_save(int red, int green, int blue) {
+  // write to EEPROM
+  EEPROM.write(RED_ADDR, RED);
+  EEPROM.write(GREEN_ADDR, GREEN);
+  EEPROM.write(BLUE_ADDR, BLUE);
+}
+
 void irlock() {
   unsigned long previousMillis = 0;
   const long interval = 200; // interval for LED indicator
@@ -142,7 +165,7 @@ void irlock() {
     }
 
     // check IR signal for unlock
-    /// TODO: Maybe have 0x40 input again to modify, then lock to prevent accidentally doing more than intended
+    /// TODO: Maybe have 0x40 (PWR) input again to modify, then lock to prevent accidentally doing more than intended
     if (IrReceiver.decode()) {
       if (IrReceiver.decodedIRData.command == 0xF) {
         IR_lock = false; // Unlock IR signal
@@ -499,6 +522,9 @@ void hexToRGB(String hexCode) {
     RED = round(RED * scaleFactor);
     GREEN = round(GREEN * scaleFactor);
     BLUE = round(BLUE * scaleFactor);
+
+    // save values to EEPROM
+    eeprom_save(RED, GREEN, BLUE);
   }
 }
 
