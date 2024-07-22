@@ -19,21 +19,20 @@
 #define IR_RECEIVER_PIN 2
 
 // ARGB pin
-#define NUM_LEDS      30
+#define NUM_LEDS      144
 #define LED_PIN       6
-#define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8 / 4 / 2 / 1
+#define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
-// EEPROM address
+// EEPROM addresses
 #define RED_ADDR 0
 #define GREEN_ADDR 1
 #define BLUE_ADDR 2
+#define RAINBOW_ADDR 3
 
-// default RED to 255
-/// TODO: Global -> local variables to save on dynamic memory
 unsigned int RED = 0;
 unsigned int GREEN = 0;
-unsigned int BLUE = MAX_INTENSITY;
+unsigned int BLUE = 0;
 
 // piezo pin
 #define PIEZO_PIN     A0
@@ -52,7 +51,7 @@ bool modifier = false;
 bool IR_lock = false;
 
 // delay threshold for flash duration
-int delayThreshold = 100;
+int DELAY_THRESHOLD = 100;
 
 // For trail ripple effect
 const int TRAIL_LENGTH = 25;
@@ -61,9 +60,23 @@ const int TRAIL_MAX = 10;  // Maximum number of simultaneous trails
 struct Trail {
   int position;
   bool active;
+  CRGB color;
 };
 
 Trail trails[TRAIL_MAX];
+
+// Color array for rainbow effect
+bool rainbow = false;
+int color_index = 0;
+CRGB RainbowColors[] = {
+  CRGB::Red,
+  CRGB::Orange,
+  CRGB::Yellow,
+  CRGB::Green,
+  CRGB::Blue,
+  CRGB::Indigo,
+  CRGB::Violet
+};
 
 void setup() {
   // built-in LED
@@ -76,6 +89,13 @@ void setup() {
   // }
   FastLED.show();
 
+  // adjust colors in the RainbowColors array to adhere to MAX_INTENSITY
+  for (int i = 0; i < sizeof(RainbowColors) / sizeof(RainbowColors[0]); i++) {
+    RainbowColors[i].r = scale8(RainbowColors[i].r, MAX_INTENSITY);
+    RainbowColors[i].g = scale8(RainbowColors[i].g, MAX_INTENSITY);
+    RainbowColors[i].b = scale8(RainbowColors[i].b, MAX_INTENSITY);
+  }
+
   // piezo
   pinMode(PIEZO_PIN, INPUT);
   // debug
@@ -84,6 +104,9 @@ void setup() {
   // IR
   // Start the receiver, set default feedback LED
   IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
+
+  // restore color values
+  eeprom_read();
 
   // Initialize all trails as inactive
   for (int i = 0; i < TRAIL_MAX; i++) {
@@ -101,9 +124,12 @@ void loop() {
   // delay(2);
   //
 
-  // restore color values
-  eeprom_read(RED, GREEN, BLUE);
+  check_IR_signal(IrReceiver);
 
+  piezo_trigger();
+}
+
+void check_IR_signal(IRrecv IrReciever) {
   // IR remote instructions
   if (IrReceiver.decode()) {
 
@@ -125,28 +151,44 @@ void loop() {
     }
     delay(1000); // delay to prevent multiple inputs
   }
-
-  // this works fine
-  if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {    // piezo reads analog
-    // flash LED
-    onARGB();
-    delay(delayThreshold);
-    offARGB();
-  }
 }
 
-void eeprom_read(int red, int green, int blue) {
+bool handleIRInput(int command) {
+  /*
+  * Print a summary of received data
+  */
+
+  if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
+    Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+    // We have an unknown protocol here, print extended info
+    IrReceiver.printIRResultRawFormatted(&Serial, true);
+    IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+    // flashError(2);
+    return false;
+  } else {
+    IrReceiver.resume(); // Early enable receiving of the next IR frame
+    IrReceiver.printIRResultShort(&Serial);
+    // IR reciever debug
+    // IrReceiver.printIRSendUsage(&Serial);
+    //
+  }
+  Serial.println();
+  return true;
+}
+
+void eeprom_read() {
   // read from EEPROM
   RED = EEPROM.read(RED_ADDR);
   GREEN = EEPROM.read(GREEN_ADDR);
   BLUE = EEPROM.read(BLUE_ADDR);
+  rainbow = EEPROM.read(RAINBOW_ADDR);
 }
 
 void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
-  EEPROM.write(RED_ADDR, RED);
-  EEPROM.write(GREEN_ADDR, GREEN);
-  EEPROM.write(BLUE_ADDR, BLUE);
+  EEPROM.write(RED_ADDR, red);
+  EEPROM.write(GREEN_ADDR, green);
+  EEPROM.write(BLUE_ADDR, blue);
 }
 
 void irlock() {
@@ -175,57 +217,32 @@ void irlock() {
     }
 
     // Check the piezo sensor
-    if (analogRead(PIEZO_PIN) > PIEZO_THRESH) { // Piezo reads analog
-      // Flash LED
-      onARGB();
-      delay(delayThreshold);
-      offARGB();
-    }
+    piezo_trigger();
   }
 
   // Ensure the built-in LED is turned off when unlocked
   digitalWrite(LED_BUILTIN, LOW);
 }
 
-
-
-bool handleIRInput(int command) {
-  /*
-  * Print a summary of received data
-  */
-
-  if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-    Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
-    // We have an unknown protocol here, print extended info
-    IrReceiver.printIRResultRawFormatted(&Serial, true);
-    IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
-    // flashError(2);
-    return false;
-  } else {
-    IrReceiver.resume(); // Early enable receiving of the next IR frame
-    IrReceiver.printIRResultShort(&Serial);
-    // IR reciever debug
-    // IrReceiver.printIRSendUsage(&Serial);
-    //
-  }
-  Serial.println();
-  return true;
+void piezo_trigger() {
+  if (analogRead(PIEZO_PIN) > PIEZO_THRESH) { // Piezo reads analog
+      // Flash LED
+      onARGB();
+      delay(DELAY_THRESHOLD);
+      offARGB();
+    }
 }
 
 void onARGB() {
   // do the thing but ARGB
-  for (int i = 0; i < NUM_LEDS; i++){
-    led[i] = CRGB(RED, GREEN, BLUE);
-  }
+  fill_solid(led, NUM_LEDS, rainbow? RainbowColors[(color_index++) % sizeof(RainbowColors)] : CRGB(RED, GREEN, BLUE));
+
   FastLED.show();
 }
 
 void offARGB() {
   // do the off thing
-  for (int i = 0; i < NUM_LEDS; i++){
-    led[i] = CRGB(0, 0, 0);
-  }
-
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
   FastLED.show();
 }
 
@@ -286,7 +303,7 @@ int processHexCode(int IRvalue) {
         }
         break;
 
-      // ==================== row 2 - Color ==========================================
+      // ==================== row 2 | Color ==========================================
       case 0x58:
         // red
         hexToRGB("#FF0000");
@@ -304,7 +321,7 @@ int processHexCode(int IRvalue) {
         hexToRGB("#FFFFFF");
         break;
 
-      // ==================== row 3 - Color ==========================================
+      // ==================== row 3 | Color ==========================================
       case 0x54:
         // static orange
         hexToRGB("#FF8000");
@@ -323,7 +340,7 @@ int processHexCode(int IRvalue) {
         hexToRGB("#FF80FF");
         break;
 
-      // ==================== row 4 - Color ==========================================
+      // ==================== row 4 | Color ==========================================
       case 0x50:
         // static dark yellow
         hexToRGB("#FFD700");
@@ -341,7 +358,7 @@ int processHexCode(int IRvalue) {
         hexToRGB("#FFB6C1");
         break;
 
-      // ==================== row 5 - Color ==========================================
+      // ==================== row 5 | Color ==========================================
       case 0x1C:
         // static yellow
         hexToRGB("#FFFF00");
@@ -359,7 +376,7 @@ int processHexCode(int IRvalue) {
         hexToRGB("#F0FFF0");
         break;
 
-      // ==================== row 6 - Color ==========================================
+      // ==================== row 6 | Color ==========================================
       case 0x18:
         // static light yellow
         hexToRGB("#FFFFE0");
@@ -377,7 +394,7 @@ int processHexCode(int IRvalue) {
         hexToRGB("#F0F8FF");
         break;
 
-      // ==================== row 7 - RED/BLUE/GREEN increase, QUICK ===================
+      // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
 
       case 0x14:
         adj_color(RED, 1.1);
@@ -400,14 +417,14 @@ int processHexCode(int IRvalue) {
         } else {
           modifier = false;
           // decrease delay (quicker flash)
-          delayThreshold -= 50;
+          DELAY_THRESHOLD -= 50;
           led[0] = CRGB(0, 0, 0);
           FastLED.show();
-          Serial.println("delayThreshold: " + String(delayThreshold));
+          Serial.println("DELAY_THRESHOLD: " + String(DELAY_THRESHOLD));
         }
         break;
 
-      // ==================== row 8 - RED/BLUE/GREEN decrease, SLOW ====================
+      // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
 
       case 0x10:
         adj_color(RED, 0.9);
@@ -430,14 +447,14 @@ int processHexCode(int IRvalue) {
         } else {
           modifier = false;
           // increase delay (slower flash)
-          delayThreshold += 50;
+          DELAY_THRESHOLD += 50;
           led[0] = CRGB(0, 0, 0);
           FastLED.show();
-          Serial.println("delayThreshold: " + String(delayThreshold));
+          Serial.println("DELAY_THRESHOLD: " + String(DELAY_THRESHOLD));
         }
         break;
 
-      // ==================== row 9 - DIY 1-3, AUTO ====================================
+      // ==================== row 9 | DIY 1-3, AUTO ====================================
 
       // DIY1
       case 0xC:
@@ -457,8 +474,9 @@ int processHexCode(int IRvalue) {
       // AUTO(save) | IR lock
       case 0xF:
         if (!modifier) {
-          // save current color
-
+          eeprom_save(RED, GREEN, BLUE);    // save current color
+          EEPROM.write(RAINBOW_ADDR, rainbow);
+          flashConfirm();                   // flash to confirm save
         } else {
           modifier = false;
           // lock IR signal
@@ -467,7 +485,7 @@ int processHexCode(int IRvalue) {
         }
         break;
 
-      // ==================== row 10 DIY 4-6, FLASH ====================================
+      // ==================== row 10 | DIY 4-6, FLASH ====================================
 
       // DIY4
       case 0x8:
@@ -480,15 +498,19 @@ int processHexCode(int IRvalue) {
         break;
       // FLASH
       case 0xB:
+        // modify the type of flash
         break;
 
-      // ==================== row 11 Jump3, Jump7, FADE3, FADE7 ========================
+      // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ========================
 
       // JUMP3
       case 0x4:
-        break;
+        // Rainbow color effect
+        rainbow = true;
+        return;   // return early to prevent color change
       // JUMP7
       case 0x5:
+        // other rainbow effect
         break;
       // FADE3
       case 0x6:
@@ -503,6 +525,7 @@ int processHexCode(int IRvalue) {
       flashError(2);
         return -1;
     }
+  rainbow = false;
   return IRvalue;
 }
 
@@ -523,8 +546,7 @@ void hexToRGB(String hexCode) {
     GREEN = round(GREEN * scaleFactor);
     BLUE = round(BLUE * scaleFactor);
 
-    // save values to EEPROM
-    eeprom_save(RED, GREEN, BLUE);
+    /// NOTE: Values only saved when AUTO/SAVE is pressed
   }
 }
 
@@ -584,23 +606,6 @@ void adj_brightness(unsigned int& red, unsigned int& green, unsigned int& blue, 
   blue = (wasZeroBlue ? 0 : constrain(blue * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
 }
 
-
-void rainbow() {
-  if (RED == MAX_INTENSITY) {
-    RED = 0;
-    GREEN = MAX_INTENSITY;
-    BLUE = 0;
-  } else if (GREEN == MAX_INTENSITY) {
-    RED = 0;
-    BLUE = MAX_INTENSITY;
-    GREEN = 0;
-  } else if (BLUE == MAX_INTENSITY) {
-    RED = MAX_INTENSITY;
-    GREEN = 0;
-    BLUE = 0;
-  }
-}
-
 void ripple() {
   // Read the piezo value
   int piezoValue = analogRead(PIEZO_PIN);
@@ -611,6 +616,10 @@ void ripple() {
       if (!trails[i].active) {
         trails[i].position = 0;  // Initialize new trail position at the beginning
         trails[i].active = true;
+        trails[i].color = rainbow ? RainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
+        if (rainbow) {
+          color_index = (color_index + 1) % (sizeof(RainbowColors) / sizeof(RainbowColors[0]));
+        }
         break;
       }
     }
@@ -626,10 +635,10 @@ void ripple() {
       for (int j = 0; j < TRAIL_LENGTH; j++) {
         int pos = trails[t].position - j;
         if (pos >= 0 && pos < NUM_LEDS) {
-          led[pos] = CRGB(RED, GREEN, BLUE);
+          led[pos] = trails[t].color;
         }
       }
-      
+
       // Clear the LED just before the trail to create a gap
       int gapPos = trails[t].position - TRAIL_LENGTH;
       if (gapPos >= 0 && gapPos < NUM_LEDS) {
@@ -651,10 +660,16 @@ void ripple() {
   delay(1); // Adjust the delay for the speed of the ripple
 }
 
+
 void flashConfirm() {
-  digitalWrite(LED_BUILTIN, LOW);
-  delay(200);
-  digitalWrite(LED_BUILTIN, HIGH);
+  for (int i = 0; i < 3; i ++) {
+    led[0] = CRGB(RED, GREEN, BLUE);
+    FastLED.show();
+    delay(200);
+    led[0] = CRGB(0, 0, 0);
+    FastLED.show();
+    delay(200);
+  }
 }
 
 void flashError(int errorcode) {
