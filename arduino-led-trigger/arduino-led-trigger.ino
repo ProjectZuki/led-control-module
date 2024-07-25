@@ -30,9 +30,9 @@ CRGB led[NUM_LEDS];
 #define BLUE_ADDR 2
 #define RAINBOW_ADDR 3
 
-unsigned int RED = 0;
-unsigned int GREEN = 0;
-unsigned int BLUE = 0;
+uint8_t RED = 0;
+uint8_t GREEN = 0;
+uint8_t BLUE = 0;
 
 // piezo pin
 #define PIEZO_PIN     A0
@@ -118,11 +118,6 @@ void setup() {
 void loop() {
   // turn on built in LED to confirm functionality
   // digitalWrite(LED_BUILTIN, HIGH);
-
-  // // piezo threshold debug
-  // Serial.prinln(analogRead(A0));
-  // delay(2);
-  //
 
   check_IR_signal(IrReceiver);
 
@@ -305,93 +300,73 @@ int processHexCode(int IRvalue) {
 
       // ==================== row 2 | Color ==========================================
       case 0x58:
-        // red
-        hexToRGB("#FF0000");
+        setColor(CRGB::Red);
         break;
       case 0x59:
-        // green
-        hexToRGB("#00FF00");
+        setColor(CRGB::Green);
         break;
       case 0x45:
-        // blue
-        hexToRGB("#0000FF");
+        setColor(CRGB::Blue);
         break;
       case 0x44:
-        // white
-        hexToRGB("#FFFFFF");
+        setColor(CRGB::White);
         break;
 
       // ==================== row 3 | Color ==========================================
       case 0x54:
-        // static orange
-        hexToRGB("#FF8000");
+        setColor(CRGB::Orange);
         break;
       case 0x55:
-        // pea green
-        hexToRGB("#80FF00");
+        setColor(CRGB::LawnGreen);
         break;
       case 0x49:
-        // static dark blue
-        hexToRGB("#0080FF");
+        setColor(CRGB::Aqua);
         break;
 
       case 0x48:
-        // static pink
-        hexToRGB("#FF80FF");
+        setColor(CRGB::DeepPink);
         break;
 
       // ==================== row 4 | Color ==========================================
       case 0x50:
-        // static dark yellow
-        hexToRGB("#FFD700");
+        setColor(CRGB::Yellow);
         break;
       case 0x51:
-        // static cyan
-        hexToRGB("#00FFFF");
+        setColor(CRGB::Cyan);
         break;
       case 0x4D:
-        // static royal blue
-        hexToRGB("#4169E1");
+        setColor(CRGB::Purple);
         break;
       case 0x4C:
-        // static light pink
-        hexToRGB("#FFB6C1");
+        setColor(CRGB::Coral);
         break;
 
       // ==================== row 5 | Color ==========================================
       case 0x1C:
-        // static yellow
-        hexToRGB("#FFFF00");
+        setColor(CRGB::Gold);
         break;
       case 0x1D:
-        // static light blue
-        hexToRGB("#ADD8E6");
+        setColor(CRGB::LightCyan);
         break;
       case 0x1E:
-        // static light brown
-        hexToRGB("#D2B48C");
+        setColor(CRGB::Magenta);
         break;
-        // static green white
       case 0x1F:
-        hexToRGB("#F0FFF0");
+        setColor(CRGB::PowderBlue);
         break;
 
       // ==================== row 6 | Color ==========================================
       case 0x18:
-        // static light yellow
-        hexToRGB("#FFFFE0");
+        setColor(CRGB::LightYellow);
         break;
       case 0x19:
-        // static sky blue
-        hexToRGB("#87CEEB");
+        setColor(CRGB::Lavender);
         break;
       case 0x1A:
-        // static violet
-        hexToRGB("#EE82EE");
+        setColor(CRGB::DeepPink);
         break;
       case 0x1B:
-        // static blue white
-        hexToRGB("#F0F8FF");
+        setColor(CRGB::AliceBlue);
         break;
 
       // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
@@ -413,14 +388,12 @@ int processHexCode(int IRvalue) {
           if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
             PIEZO_THRESH = 10;
           }
-          Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
         } else {
           modifier = false;
           // decrease delay (quicker flash)
           DELAY_THRESHOLD -= 50;
           led[0] = CRGB(0, 0, 0);
           FastLED.show();
-          Serial.println("DELAY_THRESHOLD: " + String(DELAY_THRESHOLD));
         }
         break;
 
@@ -443,25 +416,30 @@ int processHexCode(int IRvalue) {
           if (PIEZO_THRESH >= 1023) {
             PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
           }
-          Serial.println("PIEZO_THRESH: " + String(PIEZO_THRESH));
         } else {
           modifier = false;
           // increase delay (slower flash)
           DELAY_THRESHOLD += 50;
           led[0] = CRGB(0, 0, 0);
           FastLED.show();
-          Serial.println("DELAY_THRESHOLD: " + String(DELAY_THRESHOLD));
         }
         break;
 
       // ==================== row 9 | DIY 1-3, AUTO ====================================
 
+
       // DIY1
       case 0xC:
-        /// TODO: IrReceiver signal must be valid, else it will stop at any signal
-        // loop until IR signal is received 
-        while (!IrReceiver.decode()) {
-          // create ripple effect
+        // loop until IR signal is received
+        // bool flag = false; 
+        while (true) {
+          // continue checking for valid IR signal
+          if (IrReceiver.decode()) {
+            if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
+              break;
+            }
+            IrReceiver.resume();    // resume IR input
+          }
           ripple();
         }
         break;
@@ -529,28 +507,13 @@ int processHexCode(int IRvalue) {
   return IRvalue;
 }
 
-void hexToRGB(String hexCode) {
-  long num = strtol(hexCode.c_str()+1, nullptr, 16);  //+1 to ignore # hex symbol
-  RED = (num >> 16) & 0xFF;
-  GREEN = num >> 8 & 0xFF;
-  BLUE = num & 0xFF;
-
-  // find max component value
-  int maxComp = max(RED, max(GREEN, BLUE));
-  // Scale values for max intensity
-  if (maxComp > MAX_INTENSITY) {
-    float scaleFactor = (float)MAX_INTENSITY / maxComp;
-
-    // set newly scaled values
-    RED = round(RED * scaleFactor);
-    GREEN = round(GREEN * scaleFactor);
-    BLUE = round(BLUE * scaleFactor);
-
-    /// NOTE: Values only saved when AUTO/SAVE is pressed
-  }
+void setColor(CRGB color) {
+  RED = scale8(color.r, MAX_INTENSITY);
+  GREEN = scale8(color.g, MAX_INTENSITY);
+  BLUE = scale8(color.b, MAX_INTENSITY);
 }
 
-void adj_color(unsigned int& color, float scale) {
+void adj_color(uint8_t& color, float scale) {
   int newColor;
   
   // Use ceil for scaling up and floor for scaling down
@@ -580,7 +543,7 @@ void adj_color(unsigned int& color, float scale) {
   Serial.println("Color: " + String(color));
 }
 
-void adj_brightness(unsigned int& red, unsigned int& green, unsigned int& blue, int value) {
+void adj_brightness(uint8_t& red, uint8_t& green, uint8_t& blue, int value) {
   // min brightness to avoid black out (specifically values that weren't previously 0)
   const unsigned int MIN_BRIGHTNESS = 1;
   
