@@ -1,15 +1,31 @@
-/**
- * Copyright (C) [Project]Zuki - All Rights Reserved
+
+/******************************************************************************
+ * @file       arduino-led-trigger.ino
+ * @brief      This source code file programs an Arduino Nano Every based on the
+ *             ATMega4809 AVR processor to flash an ARGB LED strip on impact of
+ *             a piezoelectric sensor. The device will be programmed to modify
+ *             LED colors based on an RGB IR remote.
+ *
+ * @author     Willie Alcaraz ([Project]Zuki)
+ * @date       July 2024
+ *
+ * @copyright  
+ * © 2024 [Project]Zuki. All rights reserved.
  * 
- * This source code is protected under international copyright law.  All rights
- * reserved and protected by the copyright holders. For permisssion to use this
- * source code, please contact the copyright holders.
- */
-
-
-/**
- * TODO: Feature: Add a method to program LED color switch
- */
+ * This project and all files within this repository are proprietary software:
+ * you can use it under the terms of the [Project]Zuki License. You may not use
+ * this file except in compliance with the License. You may obtain a copy of the
+ * License by contacting [Project]Zuki.
+ * 
+ * This software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ * CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * For more information, contact [Project]Zuki at:
+ * willie.alcaraz@gmail.com
+ * https://github.com/projectzuki
+ * https://williealcaraz.dev
+ *****************************************************************************/
 
 #include <IRremote.h>   // IR remote
 #include <FastLED.h>    // NeoPixel ARGB
@@ -19,6 +35,7 @@
 #define IR_RECEIVER_PIN 2
 
 // ARGB pin
+#define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
 #define NUM_LEDS      144
 #define LED_PIN       6
 #define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
@@ -257,6 +274,7 @@ void toggleOnOff() {
       }
       // update color in case of change
       onARGB();
+      delay(1000);  // delay to reduce multiple inputs
       IrReceiver.resume();
     }
   }
@@ -329,13 +347,13 @@ int processHexCode(int IRvalue) {
 
       // ==================== row 4 | Color ==========================================
       case 0x50:
-        setColor(CRGB::Yellow);
+        setColor(CRGB::Gold);
         break;
       case 0x51:
         setColor(CRGB::Cyan);
         break;
       case 0x4D:
-        setColor(CRGB::Purple);
+        setColor(CRGB::DarkViolet);
         break;
       case 0x4C:
         setColor(CRGB::Coral);
@@ -343,10 +361,10 @@ int processHexCode(int IRvalue) {
 
       // ==================== row 5 | Color ==========================================
       case 0x1C:
-        setColor(CRGB::Gold);
+        setColor(CRGB::DarkGoldenrod);
         break;
       case 0x1D:
-        setColor(CRGB::LightCyan);
+        setColor(CRGB::DarkCyan);
         break;
       case 0x1E:
         setColor(CRGB::Magenta);
@@ -357,16 +375,16 @@ int processHexCode(int IRvalue) {
 
       // ==================== row 6 | Color ==========================================
       case 0x18:
-        setColor(CRGB::LightYellow);
+        setColor(CRGB::Yellow);
         break;
       case 0x19:
-        setColor(CRGB::Lavender);
+        setColor(CRGB::DarkTurquoise);
         break;
       case 0x1A:
         setColor(CRGB::DeepPink);
         break;
       case 0x1B:
-        setColor(CRGB::AliceBlue);
+        setColor(CRGB::LightSteelBlue);
         break;
 
       // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
@@ -382,6 +400,7 @@ int processHexCode(int IRvalue) {
         break;
       // QUICK | Sensitivity down
       case 0x17:
+      {
         if (!modifier) {
           // increase sensitivity
           PIEZO_THRESH -= 50;
@@ -396,7 +415,7 @@ int processHexCode(int IRvalue) {
           FastLED.show();
         }
         break;
-
+      }
       // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
 
       case 0x10:
@@ -410,6 +429,7 @@ int processHexCode(int IRvalue) {
         break;
       // SLOW | Sensitivity up
       case 0x13:
+      {
         if (!modifier) {
           // decrease sensitivity
           PIEZO_THRESH += 50;
@@ -424,14 +444,14 @@ int processHexCode(int IRvalue) {
           FastLED.show();
         }
         break;
-
+      }
       // ==================== row 9 | DIY 1-3, AUTO ====================================
 
 
       // DIY1
       case 0xC:
+      {
         // loop until IR signal is received
-        // bool flag = false; 
         while (true) {
           // continue checking for valid IR signal
           if (IrReceiver.decode()) {
@@ -443,14 +463,28 @@ int processHexCode(int IRvalue) {
           ripple();
         }
         break;
+      }
       // DIY2
       case 0xD:
+      {
+        while (true) {
+          // continue checking for valid IR signal
+          if (IrReceiver.decode()) {
+            if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
+              break;
+            }
+            IrReceiver.resume();    // resume IR input
+          }
+          ripple2();
+        }
         break;
+      }
       //DIY3
       case 0xE:
         break;
       // AUTO(save) | IR lock
       case 0xF:
+      {
         if (!modifier) {
           eeprom_save(RED, GREEN, BLUE);    // save current color
           EEPROM.write(RAINBOW_ADDR, rainbow);
@@ -462,7 +496,7 @@ int processHexCode(int IRvalue) {
           Serial.println("IR locked");
         }
         break;
-
+      }
       // ==================== row 10 | DIY 4-6, FLASH ====================================
 
       // DIY4
@@ -499,8 +533,8 @@ int processHexCode(int IRvalue) {
       
       // Default print error for debug
       default:
-      Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
-      flashError(2);
+        Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
+        flashError(2);
         return -1;
     }
   rainbow = false;
@@ -508,6 +542,7 @@ int processHexCode(int IRvalue) {
 }
 
 void setColor(CRGB color) {
+  // set new RGB values, constrain to max intensity value
   RED = scale8(color.r, MAX_INTENSITY);
   GREEN = scale8(color.g, MAX_INTENSITY);
   BLUE = scale8(color.b, MAX_INTENSITY);
@@ -606,6 +641,51 @@ void ripple() {
       int gapPos = trails[t].position - TRAIL_LENGTH;
       if (gapPos >= 0 && gapPos < NUM_LEDS) {
         led[gapPos] = CRGB(0, 0, 0);
+      }
+      
+      // Update the position for the next frame
+      trails[t].position++;
+
+      // Deactivate the trail if it has moved past the LED strip
+      if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH + 1) { // Add 1 for the gap
+        trails[t].active = false;
+        trails[t].position = -1; // Reset position
+      }
+    }
+  }
+
+  FastLED.show();
+  delay(1); // Adjust the delay for the speed of the ripple
+}
+
+void ripple2() {
+  // Same ripple trail without the need of piezo trigger
+
+  // Add a new trail if there is room
+  for (int i = 0; i < TRAIL_MAX; i++) {
+    if (!trails[i].active) {
+      trails[i].position = 0;  // Initialize new trail position at the beginning
+      trails[i].active = true;
+      trails[i].color = rainbow ? RainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
+      if (rainbow) {
+        color_index = (color_index + 1) % (sizeof(RainbowColors) / sizeof(RainbowColors[0]));
+      }
+      break;
+    }
+  }
+
+  // Clear the LED array for each frame
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+  
+  // Update and display the trails
+  for (int t = 0; t < TRAIL_MAX; t++) {
+    if (trails[t].active) {
+      // Draw the current trail with a gap
+      for (int j = 0; j < TRAIL_LENGTH; j++) {
+        int pos = trails[t].position - j;
+        if (pos >= 0 && pos < NUM_LEDS) {
+          led[pos] = trails[t].color;
+        }
       }
       
       // Update the position for the next frame
