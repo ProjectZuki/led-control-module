@@ -30,6 +30,7 @@
 #include <IRremote.h>   // IR remote
 #include <FastLED.h>    // NeoPixel ARGB
 #include <EEPROM.h>     // save ROM data durong off state
+#include <cppQueue.h>        // queue for RGB color states
 
 // IR receiver pin
 #define IR_RECEIVER_PIN 2
@@ -41,15 +42,20 @@
 #define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
+#define BUTTON_PIN    21
+
 // EEPROM addresses
 #define RED_ADDR 0
 #define GREEN_ADDR 1
 #define BLUE_ADDR 2
 #define RAINBOW_ADDR 3
 
-uint8_t RED = 0;
-uint8_t GREEN = 0;
-uint8_t BLUE = 0;
+uint8_t RED         = 0;
+uint8_t GREEN       = 0;
+uint8_t BLUE        = 0;
+
+// create a queue of CRGB values
+cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
 
 // piezo pin
 #define PIEZO_PIN     A0
@@ -99,6 +105,9 @@ void setup() {
   // built-in LED
   pinMode(LED_BUILTIN, OUTPUT);
 
+  // button
+  pinMode(BUTTON_PIN, INPUT);
+
   // ARGB
   FastLED.addLeds<NEOPIXEL, LED_PIN>(led, NUM_LEDS);
   // for (int i = 0; i < NUM_LEDS; i++){
@@ -136,6 +145,17 @@ void loop() {
   // turn on built in LED to confirm functionality
   // digitalWrite(LED_BUILTIN, HIGH);
 
+  if (digitalRead(BUTTON_PIN) == HIGH) {
+    CRGB color;
+    CRGBQueue.pop(&color);
+    RED = color.r;
+    GREEN = color.g;
+    BLUE = color.b;
+
+    Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+    delay(1000);  // delay to prevent multiple pops
+  }
+
   validate_IR(IrReceiver);
 
   piezo_trigger();
@@ -163,17 +183,19 @@ void validate_IR(IRrecv IrReceiver) {
       IrReceiver.resume(); // Early enable receiving of the next IR frame
       IrReceiver.printIRResultShort(&Serial);
       IrReceiver.printIRSendUsage(&Serial);
+      
+      // process IR signal
+      if (IR_lock) {
+        irlock();
+      } else {
+        if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
+          Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+          flashError(1);
+        }
+      }
     }
     Serial.println();
 
-    if (IR_lock) {
-      irlock();
-    } else {
-      if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
-        Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-        flashError(1);
-      }
-    }
 
     delay(1000); // delay to prevent multiple inputs
   }
@@ -207,6 +229,18 @@ void eeprom_save(int red, int green, int blue) {
   EEPROM.write(RED_ADDR, red);
   EEPROM.write(GREEN_ADDR, green);
   EEPROM.write(BLUE_ADDR, blue);
+
+  // save CRGB value to stack
+  CRGB color = CRGB(red, green, blue);
+  CRGBQueue.push(&color);
+  // print stack size
+  Serial.println("Queue size: " + String(CRGBQueue.getCount()));
+  // print stack values
+  for (int i = 0; i < CRGBQueue.getCount(); i++) {
+    CRGB color;
+    CRGBQueue.peekIdx(&color, i);
+    Serial.println("Queue value: " + String(color.r) + ", " + String(color.g) + ", " + String(color.b));
+  }
 }
 
 /**
@@ -826,10 +860,18 @@ void ripple2() {
  */
 void flashConfirm() {
   for (int i = 0; i < 3; i ++) {
-    led[0] = CRGB(RED, GREEN, BLUE);
+    // led[0] = CRGB(RED, GREEN, BLUE);
+
+    // queue size LEDs should flash the color based on the queue
+    for (int j = 0; j < CRGBQueue.getCount(); j++) {
+      CRGB color;
+      CRGBQueue.peekIdx(&color, j);
+      led[j] = color;
+    }
     FastLED.show();
     delay(200);
-    led[0] = CRGB(0, 0, 0);
+    // led[0] = CRGB(0, 0, 0);
+    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
     FastLED.show();
     delay(200);
   }
