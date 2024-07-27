@@ -35,26 +35,24 @@
 #define IR_RECEIVER_PIN 2
 
 // ARGB pin
-#define serialnm        [112 114 111 106 101 99 116 122 117 107 105]
-#define NUM_LEDS        144
-#define LED_PIN         6
-#define MAX_INTENSITY   16    // 255 / 128 / 64 / 32 / 16 / 8
+#define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
+#define NUM_LEDS      144
+#define LED_PIN       6
+#define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
+CRGB led[NUM_LEDS];
 
 // EEPROM addresses
-#define RED_ADDR        0
-#define GREEN_ADDR      1
-#define BLUE_ADDR       2
-#define RAINBOW_ADDR    3
-
-// Piezo pin
-#define PIEZO_PIN       A0
+#define RED_ADDR 0
+#define GREEN_ADDR 1
+#define BLUE_ADDR 2
+#define RAINBOW_ADDR 3
 
 uint8_t RED = 0;
 uint8_t GREEN = 0;
 uint8_t BLUE = 0;
-CRGB led[NUM_LEDS];
 
 // piezo pin
+#define PIEZO_PIN     A0
 unsigned int PIEZO_THRESH = 500;
  
 // always on mode
@@ -66,15 +64,11 @@ decode_results results;
 
 // modifier tied to PWR button
 bool modifier = false;
-
 // IR lock
 bool IR_lock = false;
 
 // delay threshold for flash duration
 int DELAY_THRESHOLD = 100;
-// debounce delay
-const int DEBOUNCE_DELAY = 200;
-unsigned long lastDebounceTime = 0;
 
 // For trail ripple effect
 const int TRAIL_LENGTH = 25;
@@ -142,7 +136,7 @@ void loop() {
   // turn on built in LED to confirm functionality
   // digitalWrite(LED_BUILTIN, HIGH);
 
-  check_IR_signal(IrReceiver);
+  validate_IR(IrReceiver);
 
   piezo_trigger();
 }
@@ -157,60 +151,31 @@ void loop() {
  * @param IrReceiver the IRrecv object reading infrared signals
  * @return N/A
  */
-void check_IR_signal(IRrecv IrReceiver) {
+void validate_IR(IRrecv IrReceiver) {
   // IR remote instructions
   if (IrReceiver.decode()) {
-    unsigned long curr_millis = millis();
-    if (curr_millis - lastDebounceTime > DEBOUNCE_DELAY) {
-      lastDebounceTime = curr_millis;
-    // handle, sanitize IR input
-      if (IR_lock) {
-        // IR lock enabled, ignore all inputs
-        irlock();
-        
-      } else {
-        // IR lock disabled, process inputs
-        if (handleIRInput(IrReceiver.decodedIRData.command)) {
-          // IR remote instructions
-          int IRval = processHexCode(IrReceiver.decodedIRData.command);
-          if (IRval == -1) {
-            Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-            flashError(1);
-          }
-        }
+    if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
+      Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+      // We have an unknown protocol here, print extended info
+      IrReceiver.printIRResultRawFormatted(&Serial, true);
+      IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+    } else {
+      IrReceiver.resume(); // Early enable receiving of the next IR frame
+      IrReceiver.printIRResultShort(&Serial);
+      IrReceiver.printIRSendUsage(&Serial);
+    }
+    Serial.println();
+
+    if (IR_lock) {
+      irlock();
+    } else {
+      if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
+        Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+        flashError(1);
       }
     }
-    // prep for next IR input
-    IrReceiver.resume();
-  }
-}
 
-/**
- * @brief Handles the input recieved from the IR remote.
- * 
- * This function checks for a valid IR signal. If invalid, will print to serial
- * the input code received.
- * 
- * @param command the infrared command recieved
- * @return true if valid, else false
- */
-bool handleIRInput(int command) {
-  /*
-  * Print a summary of received data
-  */
-
-  if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-    Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
-    // We have an unknown protocol here, print extended info
-    IrReceiver.printIRResultRawFormatted(&Serial, true);
-    // flashError(2);
-    return false;
-  } else {
-    IrReceiver.printIRResultShort(&Serial);
-    // IR reciever debug
-    // IrReceiver.printIRSendUsage(&Serial);
-    //
-    return true;
+    delay(1000); // delay to prevent multiple inputs
   }
 }
 
@@ -338,7 +303,18 @@ void toggleOnOff() {
   onARGB();
   while (ledon) {
     if (IrReceiver.decode()) {
-      handleIRInput(IrReceiver.decodedIRData.command);
+      if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
+        Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+        // We have an unknown protocol here, print extended info
+        IrReceiver.printIRResultRawFormatted(&Serial, true);
+        IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+      } else {
+        IrReceiver.resume(); // Early enable receiving of the next IR frame
+        IrReceiver.printIRResultShort(&Serial);
+        IrReceiver.printIRSendUsage(&Serial);
+      }
+      Serial.println();
+
       if (IrReceiver.decodedIRData.command == 0x41) {
         ledon = false;
         offARGB();
@@ -349,7 +325,7 @@ void toggleOnOff() {
       }
       // update color in case of change
       onARGB();
-      delay(100);  // delay to reduce multiple inputs
+      delay(1000);  // delay to reduce multiple inputs
       IrReceiver.resume();
     }
   }
