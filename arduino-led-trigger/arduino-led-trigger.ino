@@ -35,24 +35,26 @@
 #define IR_RECEIVER_PIN 2
 
 // ARGB pin
-#define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
-#define NUM_LEDS      144
-#define LED_PIN       6
-#define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
-CRGB led[NUM_LEDS];
+#define serialnm        [112 114 111 106 101 99 116 122 117 107 105]
+#define NUM_LEDS        144
+#define LED_PIN         6
+#define MAX_INTENSITY   16    // 255 / 128 / 64 / 32 / 16 / 8
 
 // EEPROM addresses
-#define RED_ADDR 0
-#define GREEN_ADDR 1
-#define BLUE_ADDR 2
-#define RAINBOW_ADDR 3
+#define RED_ADDR        0
+#define GREEN_ADDR      1
+#define BLUE_ADDR       2
+#define RAINBOW_ADDR    3
+
+// Piezo pin
+#define PIEZO_PIN       A0
 
 uint8_t RED = 0;
 uint8_t GREEN = 0;
 uint8_t BLUE = 0;
+CRGB led[NUM_LEDS];
 
 // piezo pin
-#define PIEZO_PIN     A0
 unsigned int PIEZO_THRESH = 500;
  
 // always on mode
@@ -64,11 +66,15 @@ decode_results results;
 
 // modifier tied to PWR button
 bool modifier = false;
+
 // IR lock
 bool IR_lock = false;
 
 // delay threshold for flash duration
 int DELAY_THRESHOLD = 100;
+// debounce delay
+const int DEBOUNCE_DELAY = 200;
+unsigned long lastDebounceTime = 0;
 
 // For trail ripple effect
 const int TRAIL_LENGTH = 25;
@@ -141,30 +147,53 @@ void loop() {
   piezo_trigger();
 }
 
-void check_IR_signal(IRrecv IrReciever) {
+/**
+ * @brief Validates infrared signal
+ * 
+ * This function takes an IRrecv object to check for IR input. On input, the hex
+ * code retrieved will be validated. On bad input, it will print to serial the exact
+ * signal code that was recieved.
+ * 
+ * @param IrReceiver the IRrecv object reading infrared signals
+ * @return N/A
+ */
+void check_IR_signal(IRrecv IrReceiver) {
   // IR remote instructions
   if (IrReceiver.decode()) {
-
+    unsigned long curr_millis = millis();
+    if (curr_millis - lastDebounceTime > DEBOUNCE_DELAY) {
+      lastDebounceTime = curr_millis;
     // handle, sanitize IR input
-    if (IR_lock) {
-      // IR lock enabled, ignore all inputs
-      irlock();
-      
-    } else {
-      // IR lock disabled, process inputs
-      if (handleIRInput(IrReceiver.decodedIRData.command)) {
-        // IR remote instructions
-        int IRval = processHexCode(IrReceiver.decodedIRData.command);
-        if (IRval == -1) {
-          Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-          flashError(1);
+      if (IR_lock) {
+        // IR lock enabled, ignore all inputs
+        irlock();
+        
+      } else {
+        // IR lock disabled, process inputs
+        if (handleIRInput(IrReceiver.decodedIRData.command)) {
+          // IR remote instructions
+          int IRval = processHexCode(IrReceiver.decodedIRData.command);
+          if (IRval == -1) {
+            Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+            flashError(1);
+          }
         }
       }
     }
-    delay(1000); // delay to prevent multiple inputs
+    // prep for next IR input
+    IrReceiver.resume();
   }
 }
 
+/**
+ * @brief Handles the input recieved from the IR remote.
+ * 
+ * This function checks for a valid IR signal. If invalid, will print to serial
+ * the input code received.
+ * 
+ * @param command the infrared command recieved
+ * @return true if valid, else false
+ */
 bool handleIRInput(int command) {
   /*
   * Print a summary of received data
@@ -174,20 +203,24 @@ bool handleIRInput(int command) {
     Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
     // We have an unknown protocol here, print extended info
     IrReceiver.printIRResultRawFormatted(&Serial, true);
-    IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
     // flashError(2);
     return false;
   } else {
-    IrReceiver.resume(); // Early enable receiving of the next IR frame
     IrReceiver.printIRResultShort(&Serial);
     // IR reciever debug
     // IrReceiver.printIRSendUsage(&Serial);
     //
+    return true;
   }
-  Serial.println();
-  return true;
 }
 
+/**
+ * @brief Reads from EEPROM (Electrically Erasable Programmable Read-Only Memory)
+ * 
+ * This function reads and retrieves saved data from EEPROM
+ * 
+ * @return N/A
+ */
 void eeprom_read() {
   // read from EEPROM
   RED = EEPROM.read(RED_ADDR);
@@ -196,6 +229,14 @@ void eeprom_read() {
   rainbow = EEPROM.read(RAINBOW_ADDR);
 }
 
+/**
+ * @brief Saves to EEPROM
+ * 
+ * This function saves the current color settings to EEPROM to load on startup.
+ * 
+ * @param red, green, blue the RGB colors to be saved to EEPROM
+ * @return N/A
+ */
 void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
   EEPROM.write(RED_ADDR, red);
@@ -203,6 +244,14 @@ void eeprom_save(int red, int green, int blue) {
   EEPROM.write(BLUE_ADDR, blue);
 }
 
+/**
+ * @brief Locks IR signal to prevent modifications to current state
+ * 
+ * This functoin will prevent additional IR inputs from being received until
+ * unlocked using IR hex code 0xF.
+ * 
+ * @return N/A
+ */
 void irlock() {
   unsigned long previousMillis = 0;
   const long interval = 200; // interval for LED indicator
@@ -236,6 +285,14 @@ void irlock() {
   digitalWrite(LED_BUILTIN, LOW);
 }
 
+/**
+ * @brief Checks for analog input from the piezoelectric sensor and flashes LED strip
+ * 
+ * This function will be called on loop checking for input from the piezoelectric sensor.
+ * On input, will briefly flash the ARGB LED strip for a duration of DELAY_THRESHOLD
+ * 
+ * @return N/A
+ */
 void piezo_trigger() {
   if (analogRead(PIEZO_PIN) > PIEZO_THRESH) { // Piezo reads analog
       // Flash LED
@@ -245,6 +302,12 @@ void piezo_trigger() {
     }
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void onARGB() {
   // do the thing but ARGB
   fill_solid(led, NUM_LEDS, rainbow? RainbowColors[(color_index++) % sizeof(RainbowColors)] : CRGB(RED, GREEN, BLUE));
@@ -252,12 +315,24 @@ void onARGB() {
   FastLED.show();
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void offARGB() {
   // do the off thing
   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
   FastLED.show();
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void toggleOnOff() {
   // toggle on/off for play/pause button
   onARGB();
@@ -274,12 +349,18 @@ void toggleOnOff() {
       }
       // update color in case of change
       onARGB();
-      delay(1000);  // delay to reduce multiple inputs
+      delay(100);  // delay to reduce multiple inputs
       IrReceiver.resume();
     }
   }
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 int processHexCode(int IRvalue) {
       /*
       * process codes
@@ -541,6 +622,12 @@ int processHexCode(int IRvalue) {
   return IRvalue;
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void setColor(CRGB color) {
   // set new RGB values, constrain to max intensity value
   RED = scale8(color.r, MAX_INTENSITY);
@@ -548,6 +635,12 @@ void setColor(CRGB color) {
   BLUE = scale8(color.b, MAX_INTENSITY);
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void adj_color(uint8_t& color, float scale) {
   int newColor;
   
@@ -578,6 +671,12 @@ void adj_color(uint8_t& color, float scale) {
   Serial.println("Color: " + String(color));
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void adj_brightness(uint8_t& red, uint8_t& green, uint8_t& blue, int value) {
   // min brightness to avoid black out (specifically values that weren't previously 0)
   const unsigned int MIN_BRIGHTNESS = 1;
@@ -604,6 +703,12 @@ void adj_brightness(uint8_t& red, uint8_t& green, uint8_t& blue, int value) {
   blue = (wasZeroBlue ? 0 : constrain(blue * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void ripple() {
   // Read the piezo value
   int piezoValue = analogRead(PIEZO_PIN);
@@ -658,6 +763,12 @@ void ripple() {
   delay(1); // Adjust the delay for the speed of the ripple
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void ripple2() {
   // Same ripple trail without the need of piezo trigger
 
@@ -703,7 +814,12 @@ void ripple2() {
   delay(1); // Adjust the delay for the speed of the ripple
 }
 
-
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void flashConfirm() {
   for (int i = 0; i < 3; i ++) {
     led[0] = CRGB(RED, GREEN, BLUE);
@@ -715,6 +831,12 @@ void flashConfirm() {
   }
 }
 
+/**
+ * @brief 
+ * 
+ * @param
+ * @return 
+ */
 void flashError(int errorcode) {
   /*
   * Flash error codes based on specific error.
