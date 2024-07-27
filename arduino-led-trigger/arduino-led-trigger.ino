@@ -268,10 +268,12 @@ void piezo_trigger() {
 }
 
 /**
- * @brief 
+ * @brief Turn on LEDs
  * 
- * @param
- * @return 
+ * This function will activate the ARGB stip with the current color setting for
+ *  RED, GREEN, BLUE
+ * 
+ * @return N/A
  */
 void onARGB() {
   // do the thing but ARGB
@@ -281,10 +283,11 @@ void onARGB() {
 }
 
 /**
- * @brief 
+ * @brief Turn off LEDs
  * 
- * @param
- * @return 
+ * This function turns off the ARGB strip
+ * 
+ * @return N/A
  */
 void offARGB() {
   // do the off thing
@@ -293,10 +296,12 @@ void offARGB() {
 }
 
 /**
- * @brief 
+ * @brief Toggle on/off for play/pause button
  * 
- * @param
- * @return 
+ * This function continously activates the ARGB strip until the play/pause button
+ * is pressed again to deactivate the strip.
+ * 
+ * @return N/A
  */
 void toggleOnOff() {
   // toggle on/off for play/pause button
@@ -332,10 +337,13 @@ void toggleOnOff() {
 }
 
 /**
- * @brief 
+ * @brief Process IR hex code
  * 
- * @param
- * @return 
+ * This function will process the IR hex code recieved from the IR remote, setting
+ *  the appropriate colors for RED, GREEN, BLUE according to the hex code from the IR remote.
+ * 
+ * @param IRvalue the hex code recieved from the IR remote
+ * @return -1 if the IR hex code is invalid
  */
 int processHexCode(int IRvalue) {
       /*
@@ -599,10 +607,13 @@ int processHexCode(int IRvalue) {
 }
 
 /**
- * @brief 
+ * @brief Sets the values for RED, GREEN, BLUE
  * 
- * @param
- * @return 
+ * This function will set the values for RED, GREEN, BLUE to the CRGB color according
+ *  to the input color.
+ * 
+ * @param color the CRGB color to set the values for RED, GREEN, BLUE
+ * @return N/A
  */
 void setColor(CRGB color) {
   // set new RGB values, constrain to max intensity value
@@ -612,10 +623,14 @@ void setColor(CRGB color) {
 }
 
 /**
- * @brief 
+ * @brief Adjusts the color value
  * 
- * @param
- * @return 
+ * This function will adjust the color value based on the scale factor provided.
+ * 
+ * @param color the color value to adjust
+ * @param scale the scale factor to adjust the color value
+ * 
+ * @return N/A
  */
 void adj_color(uint8_t& color, float scale) {
   int newColor;
@@ -648,10 +663,18 @@ void adj_color(uint8_t& color, float scale) {
 }
 
 /**
- * @brief 
+ * @brief Adjusts the brightness of the color
  * 
- * @param
- * @return 
+ * This function will adjust the brightness of the color based on the value provided.
+ *  The brightness value can be positive or negative and the scale factor is determined to
+ *  ensure the color value is within the range of 1 to MAX_INTENSITY.
+ * 
+ * @param red the red color value
+ * @param green the green color value
+ * @param blue the blue color value
+ * @param value the amount to adjust the brightness (positive or negative)
+ * 
+ * @return N/A
  */
 void adj_brightness(uint8_t& red, uint8_t& green, uint8_t& blue, int value) {
   // min brightness to avoid black out (specifically values that weren't previously 0)
@@ -680,10 +703,12 @@ void adj_brightness(uint8_t& red, uint8_t& green, uint8_t& blue, int value) {
 }
 
 /**
- * @brief 
+ * @brief Creates a ripple effect on impact
  * 
- * @param
- * @return 
+ * This function will create a ripple effect on the ARGB LED strip each time the
+ *  piezo sensor is hit.
+ * 
+ * @return N/A
  */
 void ripple() {
   // Read the piezo value
@@ -740,10 +765,12 @@ void ripple() {
 }
 
 /**
- * @brief 
+ * @brief Creates a ripple effect without requiring impact
  * 
- * @param
- * @return 
+ * This function will create a ripple effect on the ARGB LED strip without requiring
+ *  input from the piezo sensor.
+ * 
+ * @return N/A
  */
 void ripple2() {
   // Same ripple trail without the need of piezo trigger
@@ -791,10 +818,11 @@ void ripple2() {
 }
 
 /**
- * @brief 
+ * @brief Flashes the LED strip to confirm a save
  * 
- * @param
- * @return 
+ * This function will flash the LED strip to confirm a save to EEPROM.
+ * 
+ * @return N/A
  */
 void flashConfirm() {
   for (int i = 0; i < 3; i ++) {
@@ -808,10 +836,12 @@ void flashConfirm() {
 }
 
 /**
- * @brief 
+ * @brief Flashes the LED strip to indicate an error
  * 
- * @param
- * @return 
+ * This function will flash the LED strip to indicate an error based on the error code.
+ * 
+ * @param errorcode the error code to flash the LED strip (number of flashes)
+ * @return N/A
  */
 void flashError(int errorcode) {
   /*
