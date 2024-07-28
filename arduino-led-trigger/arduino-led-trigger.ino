@@ -33,22 +33,22 @@
 #include <cppQueue.h>        // queue for RGB color states
 
 // IR receiver pin
-#define IR_RECEIVER_PIN 2
+#define IR_RECEIVER_PIN 18
 
 // ARGB pin
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
 #define NUM_LEDS      144
-#define LED_PIN       6
+#define LED_PIN       2
 #define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
 #define BUTTON_PIN    21
 
 // EEPROM addresses
-#define RED_ADDR 0
-#define GREEN_ADDR 1
-#define BLUE_ADDR 2
-#define RAINBOW_ADDR 3
+#define RED_ADDR      0
+#define GREEN_ADDR    1
+#define BLUE_ADDR     2
+#define RAINBOW_ADDR  3
 
 uint8_t RED         = 0;
 uint8_t GREEN       = 0;
@@ -153,7 +153,7 @@ void loop() {
     BLUE = color.b;
 
     Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
-    delay(1000);  // delay to prevent multiple pops
+    delay(200);  // delay to prevent multiple pops
   }
 
   validate_IR(IrReceiver);
@@ -580,6 +580,8 @@ int processHexCode(int IRvalue) {
       }
       //DIY3
       case 0xE:
+        // check current color queue
+        check_colorQueue();
         break;
       // AUTO(save) | IR lock
       case 0xF:
@@ -852,13 +854,13 @@ void ripple2() {
 }
 
 /**
- * @brief Flashes the LED strip to confirm a save
+ * @brief Visualizes the color queue
  * 
- * This function will flash the LED strip to confirm a save to EEPROM.
+ * This function will flash the LED strip to show the colors in the queue.
  * 
  * @return N/A
  */
-void flashConfirm() {
+void check_colorQueue() {
   for (int i = 0; i < 3; i ++) {
     // led[0] = CRGB(RED, GREEN, BLUE);
 
@@ -868,6 +870,25 @@ void flashConfirm() {
       CRGBQueue.peekIdx(&color, j);
       led[j] = color;
     }
+    FastLED.show();
+    delay(200);
+    // led[0] = CRGB(0, 0, 0);
+    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+    FastLED.show();
+    delay(200);
+  }
+}
+
+/**
+ * @brief Flashes the LED strip to confirm a save
+ * 
+ * This function will flash the LED strip to confirm a save to EEPROM.
+ * 
+ * @return N/A
+ */
+void flashConfirm() {
+  for (int i = 0; i < 3; i ++) {
+    led[0] = CRGB(RED, GREEN, BLUE);
     FastLED.show();
     delay(200);
     // led[0] = CRGB(0, 0, 0);
