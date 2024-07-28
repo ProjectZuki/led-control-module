@@ -42,8 +42,6 @@
 #define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
-#define BUTTON_PIN    21
-
 // EEPROM addresses
 #define RED_ADDR      0
 #define GREEN_ADDR    1
@@ -105,9 +103,6 @@ void setup() {
   // built-in LED
   pinMode(LED_BUILTIN, OUTPUT);
 
-  // button
-  pinMode(BUTTON_PIN, INPUT);
-
   // ARGB
   FastLED.addLeds<NEOPIXEL, LED_PIN>(led, NUM_LEDS);
   // for (int i = 0; i < NUM_LEDS; i++){
@@ -144,17 +139,6 @@ void setup() {
 void loop() {
   // turn on built in LED to confirm functionality
   // digitalWrite(LED_BUILTIN, HIGH);
-
-  if (digitalRead(BUTTON_PIN) == HIGH) {
-    CRGB color;
-    CRGBQueue.pop(&color);
-    RED = color.r;
-    GREEN = color.g;
-    BLUE = color.b;
-
-    Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
-    delay(200);  // delay to prevent multiple pops
-  }
 
   validate_IR(IrReceiver);
 
