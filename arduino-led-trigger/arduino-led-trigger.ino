@@ -42,6 +42,10 @@
 #define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
+#define LED_RED       5
+#define LED_GREEN     6
+#define LED_BLUE      9
+
 #define BUTTON_PIN    21
 
 // EEPROM addresses
@@ -113,6 +117,11 @@ void setup() {
   FastLED.setBrightness(MAX_INTENSITY);
   FastLED.show();
 
+  // RGB LED
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_BLUE, OUTPUT);
+
   // adjust colors in the RainbowColors array to adhere to MAX_INTENSITY
   for (int i = 0; i < sizeof(RainbowColors) / sizeof(RainbowColors[0]); i++) {
     RainbowColors[i].r = scale8(RainbowColors[i].r, MAX_INTENSITY);
@@ -153,6 +162,10 @@ void loop() {
     Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
     delay(200);  // delay to prevent multiple pops
   }
+
+  /// NOTE: uncomment for actual implementation
+  // always-on LED will be 25% brightness of the current color
+  // onLED();
 
   validate_IR(IrReceiver);
 
@@ -229,8 +242,15 @@ void eeprom_save(int red, int green, int blue) {
   EEPROM.write(GREEN_ADDR, green);
   EEPROM.write(BLUE_ADDR, blue);
 
+  // add to queue
+  push_queue(red, green, blue);
+  
+}
+
+void push_queue(int red, int green, int blue) {
   // save CRGB value to stack
   CRGB color = CRGB(red, green, blue);
+
   CRGBQueue.push(&color);
   // print stack size
   Serial.println("Queue size: " + String(CRGBQueue.getCount()));
@@ -301,6 +321,34 @@ void piezo_trigger() {
 }
 
 /**
+ * @brief Sets the active LED to the current color value
+ * 
+ * This function will set the built-in LED to the color value.
+ * 
+ * @return N/A
+ */
+void onLED() {
+  // built-in LED
+  digitalWrite(LED_RED, RED);
+  digitalWrite(LED_GREEN, GREEN);
+  digitalWrite(LED_BLUE, BLUE);
+}
+
+/**
+ * @brief Turn off active LED
+ * 
+ * This function turns off the active LED
+ * 
+ * @return N/A
+ */
+void offLED() {
+  // built-in LED
+  digitalWrite(LED_RED, 0);
+  digitalWrite(LED_GREEN, 0);
+  digitalWrite(LED_BLUE, 0);
+}
+
+/**
  * @brief Turn on LEDs
  * 
  * This function will activate the ARGB stip with the current color setting for
@@ -363,6 +411,7 @@ void toggleOnOff() {
       }
       // update color in case of change
       onARGB();
+      onLED();
       delay(200);  // delay to reduce multiple inputs
       IrReceiver.resume();
     }
@@ -832,10 +881,16 @@ void flashConfirm() {
   for (int i = 0; i < 3; i ++) {
     led[0] = CRGB(RED, GREEN, BLUE);
     FastLED.show();
+
+    onLED();
+
     delay(200);
     // led[0] = CRGB(0, 0, 0);
     fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
     FastLED.show();
+
+    offLED();
+
     delay(200);
   }
 }
