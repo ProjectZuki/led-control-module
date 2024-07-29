@@ -65,8 +65,8 @@ cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
 #define PIEZO_PIN     A0
 unsigned int PIEZO_THRESH = 500;
  
-// always on mode
-bool ledon = false;
+// // always on mode
+// bool ledon = false;
 
 // IR
 IRrecv irrecv(IR_RECEIVER_PIN);
@@ -103,6 +103,32 @@ CRGB RainbowColors[] = {
   CRGB::Blue,
   CRGB::Indigo,
   CRGB::Violet
+};
+
+// All known IR hex codes
+const uint32_t known_hex_codes[] = {
+  // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
+  0x5C, 0x5D, 0x41, 0x40,
+  // ==================== row 2 | Color ==========================================
+  0x58, 0x59, 0x45, 0x44,
+  // ==================== row 3 | Color ==========================================
+  0x54, 0x55, 0x49, 0x48,
+  // ==================== row 4 | Color ==========================================
+  0x50, 0x51, 0x4D, 0x4C,
+  // ==================== row 5 | Color ==========================================
+  0x1C, 0x1D, 0x1E, 0x1F,
+  // ==================== row 6 | Color ==========================================
+  0x18, 0x19, 0x1A, 0x1B,
+  // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
+  0x14, 0x15, 0x16, 0x17,
+  // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
+  0x10, 0x11, 0x12, 0x13,
+  // ==================== row 9 | DIY 1-3, AUTO ====================================
+  0xC, 0xD, 0xE, 0xF,
+  // ==================== row 10 | DIY 4-6, FLASH ====================================
+  0x8, 0x9, 0xA, 0xB,
+  // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ========================
+  0x4, 0x5, 0x6, 0x7
 };
 
 void setup() {
@@ -170,6 +196,23 @@ void loop() {
   validate_IR(IrReceiver);
 
   piezo_trigger();
+}
+
+/**
+ * @brief Checks if the hex code is a known IR signal
+ * 
+ * This function will check if the hex code is a known IR signal.
+ * 
+ * @param hex_code the hex code to check if it is a known IR signal
+ * @return true if the hex code is a known IR signal, false otherwise
+ */
+bool check_hex_code(uint32_t hex_code) {
+  for (int i = 0; i < sizeof(known_hex_codes) / sizeof(known_hex_codes[0]); i++) {
+    if (hex_code == known_hex_codes[i]) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -247,6 +290,14 @@ void eeprom_save(int red, int green, int blue) {
   
 }
 
+/**
+ * @brief Pushes RGB color to queue
+ * 
+ * This function will push the RGB color to the queue.
+ * 
+ * @param red, green, blue the RGB colors to be pushed to the queue
+ * @return N/A
+ */
 void push_queue(int red, int green, int blue) {
   // save CRGB value to stack
   CRGB color = CRGB(red, green, blue);
@@ -385,6 +436,7 @@ void offARGB() {
  * @return N/A
  */
 void toggleOnOff() {
+  bool ledon = true;
   // toggle on/off for play/pause button
   onARGB();
   while (ledon) {
@@ -404,6 +456,7 @@ void toggleOnOff() {
       if (IrReceiver.decodedIRData.command == 0x41) {
         ledon = false;
         offARGB();
+        offLED();
         break;
       } else {
         // apply modifications to color
@@ -445,7 +498,6 @@ int processHexCode(int IRvalue) {
       // play/pause
       case 0x41:
         // reverse lit status
-        ledon = !ledon;
         toggleOnOff();
         break;
       // PWR
@@ -650,6 +702,7 @@ int processHexCode(int IRvalue) {
 
       // DIY4
       case 0x8:
+        rainbow_effect();
         break;
       // DIY5
       case 0x9:
@@ -844,6 +897,27 @@ void ripple2() {
 
   FastLED.show();
   delay(1); // Adjust the delay for the speed of the ripple
+}
+
+/**
+ * @brief Creates a rainbow effect
+ * 
+ * This function will create a rainbow effect on the ARGB LED strip.
+ * 
+ * NOTE: This function will run indefinitely. Device must be powered off to reset.
+ * 
+ * @return N/A
+ */
+void rainbow_effect() {
+  while (true) {
+    for (int j = 0; j < 255; j++) {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        led[i] = CHSV(i - (j * 2), 255, 255); /* The higher the value 4 the less fade there is and vice versa */ 
+      }
+      FastLED.show();
+      delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
+    }
+  }
 }
 
 /**
