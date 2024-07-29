@@ -39,7 +39,7 @@
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
 #define NUM_LEDS      144
 #define LED_PIN       2
-#define MAX_INTENSITY 16    // 255 / 128 / 64 / 32 / 16 / 8
+#define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
 #define BUTTON_PIN    21
@@ -110,9 +110,7 @@ void setup() {
 
   // ARGB
   FastLED.addLeds<NEOPIXEL, LED_PIN>(led, NUM_LEDS);
-  // for (int i = 0; i < NUM_LEDS; i++){
-  //   led[i] = CRGB(0, 0, MAX_INTENSITY);
-  // }
+  FastLED.setBrightness(MAX_INTENSITY);
   FastLED.show();
 
   // adjust colors in the RainbowColors array to adhere to MAX_INTENSITY
@@ -179,6 +177,7 @@ void validate_IR(IRrecv IrReceiver) {
       // We have an unknown protocol here, print extended info
       IrReceiver.printIRResultRawFormatted(&Serial, true);
       IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+      return;
     } else {
       IrReceiver.resume(); // Early enable receiving of the next IR frame
       IrReceiver.printIRResultShort(&Serial);
@@ -197,7 +196,7 @@ void validate_IR(IRrecv IrReceiver) {
     Serial.println();
 
 
-    delay(1000); // delay to prevent multiple inputs
+    delay(500); // delay to prevent multiple inputs
   }
 }
 
@@ -364,7 +363,7 @@ void toggleOnOff() {
       }
       // update color in case of change
       onARGB();
-      delay(1000);  // delay to reduce multiple inputs
+      delay(200);  // delay to reduce multiple inputs
       IrReceiver.resume();
     }
   }
@@ -388,11 +387,11 @@ int processHexCode(int IRvalue) {
 
       // increase brightness
       case 0x5C:
-        adj_brightness(RED, GREEN, BLUE, 20);
+        FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
         break;
       // decrease brightness
       case 0x5D:
-        adj_brightness(RED, GREEN, BLUE, -20);
+        FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
         break;
       // play/pause
       case 0x41:
@@ -489,13 +488,13 @@ int processHexCode(int IRvalue) {
       // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
 
       case 0x14:
-        adj_color(RED, 1.1);
+        adj_color(RED, MAX_INTENSITY/10);
         break;
       case 0x15:
-        adj_color(GREEN, 1.1);
+        adj_color(GREEN, MAX_INTENSITY/10);
         break;
       case 0x16:
-        adj_color(BLUE, 1.1);
+        adj_color(BLUE, MAX_INTENSITY/10);
         break;
       // QUICK | Sensitivity down
       case 0x17:
@@ -518,13 +517,13 @@ int processHexCode(int IRvalue) {
       // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
 
       case 0x10:
-        adj_color(RED, 0.9);
+        adj_color(RED, MAX_INTENSITY/-10);
         break;
       case 0x11:
-        adj_color(GREEN, 0.9);
+        adj_color(GREEN, MAX_INTENSITY/-10);
         break;
       case 0x12:
-        adj_color(BLUE, 0.9);
+        adj_color(BLUE, MAX_INTENSITY/-10);
         break;
       // SLOW | Sensitivity up
       case 0x13:
@@ -668,74 +667,19 @@ void setColor(CRGB color) {
  * 
  * @return N/A
  */
-void adj_color(uint8_t& color, float scale) {
-  int newColor;
-  
-  // Use ceil for scaling up and floor for scaling down
-  if (scale > 1) {
-    newColor = ceil(color * scale);
-  } else {
-    newColor = floor(color * scale);
-    if (newColor == 0) {
-      color = 0;
-      return;
-    }
-  }
+void adj_color(uint8_t& color, int scale) {
+  // Adjust color value
+  int newColor = color + scale;
+
+  // Constrain new color value to be within 1 and MAX_INTENSITY
+  newColor = constrain(newColor, 1, MAX_INTENSITY);
+
+  // Set the adjusted color value
+  color = newColor;
 
   // Debug
-  Serial.println("New Color: " + String(newColor));
-
-  // Constrain new color value 
-  if (newColor >= 1 && newColor <= MAX_INTENSITY) {
-    color = newColor;
-  } else if (newColor > MAX_INTENSITY) {
-    color = MAX_INTENSITY;   // Constrain color to max intensity
-  } else if (newColor < 1) {
-    color = 1;    // Constrain color to min intensity
-  }
-
-  // Debug
-  Serial.println("Color: " + String(color));
-}
-
-/**
- * @brief Adjusts the brightness of the color
- * 
- * This function will adjust the brightness of the color based on the value provided.
- *  The brightness value can be positive or negative and the scale factor is determined to
- *  ensure the color value is within the range of 1 to MAX_INTENSITY.
- * 
- * @param red the red color value
- * @param green the green color value
- * @param blue the blue color value
- * @param value the amount to adjust the brightness (positive or negative)
- * 
- * @return N/A
- */
-void adj_brightness(uint8_t& red, uint8_t& green, uint8_t& blue, int value) {
-  // min brightness to avoid black out (specifically values that weren't previously 0)
-  const unsigned int MIN_BRIGHTNESS = 1;
-  
-  // find max value to scale all componets
-  unsigned int maxComponent = max(red, max(green, blue));
-  
-  // can't scale 0, return
-  if (maxComponent == 0) return;
-
-  // check for components that were previously 0
-  bool wasZeroRed = (red == 0);
-  bool wasZeroGreen = (green == 0);
-  bool wasZeroBlue = (blue == 0);
-
-  // new value with brightness adjustment, ensure it is in range
-  int newMaxComponent = maxComponent + value;
-  newMaxComponent = constrain(newMaxComponent, MIN_BRIGHTNESS, MAX_INTENSITY);
-
-  // apply scaling factor to non-zero components
-  float scaleFactor = (float)newMaxComponent / maxComponent;
-  red = (wasZeroRed ? 0 : constrain(red * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
-  green = (wasZeroGreen ? 0 : constrain(green * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
-  blue = (wasZeroBlue ? 0 : constrain(blue * scaleFactor, MIN_BRIGHTNESS, MAX_INTENSITY));
+  Serial.println("Adjusted color: " + String(color));
+  Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
 }
 
 /**
@@ -862,8 +806,6 @@ void ripple2() {
  */
 void check_colorQueue() {
   for (int i = 0; i < 3; i ++) {
-    // led[0] = CRGB(RED, GREEN, BLUE);
-
     // queue size LEDs should flash the color based on the queue
     for (int j = 0; j < CRGBQueue.getCount(); j++) {
       CRGB color;
@@ -872,7 +814,7 @@ void check_colorQueue() {
     }
     FastLED.show();
     delay(200);
-    // led[0] = CRGB(0, 0, 0);
+
     fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
     FastLED.show();
     delay(200);
