@@ -27,10 +27,11 @@
  * https://williealcaraz.dev
  *****************************************************************************/
 
-#include <IRremote.h>   // IR remote
-#include <FastLED.h>    // NeoPixel ARGB
-#include <EEPROM.h>     // save ROM data durong off state
-#include <cppQueue.h>        // queue for RGB color states
+#include <IRremote.h>         // IR remote
+#include <FastLED.h>          // NeoPixel ARGB
+#include <EEPROM.h>           // save ROM data durong off state
+#include <cppQueue.h>         // queue for RGB color states
+#include <SoftwareSerial.h>   // HC-12 module
 
 // IR receiver pin
 #define IR_RECEIVER_PIN 18
@@ -38,7 +39,7 @@
 // ARGB pin
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
 #define NUM_LEDS      144
-#define LED_PIN       2
+#define LED_PIN       10
 #define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
@@ -53,6 +54,9 @@ CRGB led[NUM_LEDS];
 #define GREEN_ADDR    1
 #define BLUE_ADDR     2
 #define RAINBOW_ADDR  3
+
+// HC-12 module
+SoftwareSerial HC12(2, 3);  // HC-12 TX Pin, HC-12 RX Pin
 
 uint8_t RED         = 0;
 uint8_t GREEN       = 0;
@@ -160,6 +164,9 @@ void setup() {
   // debug
   Serial.begin(9600);
 
+  // HC-12 module communication
+  HC12.begin(9600);
+
   // IR
   // Start the receiver, set default feedback LED
   IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
@@ -178,6 +185,31 @@ void loop() {
   // turn on built in LED to confirm functionality
   // digitalWrite(LED_BUILTIN, HIGH);
 
+  check_rx();
+
+  check_button();
+
+  /// NOTE: uncomment for actual implementation
+  // always-on LED will be 25% brightness of the current color
+  // onLED();
+
+  validate_IR(IrReceiver);
+
+  piezo_trigger();
+}
+
+void check_rx() {
+  if (HC12.available() >= 3) {
+    // read data
+    RED   = static_cast<uint8_t>(HC12.read());
+    GREEN = static_cast<uint8_t>(HC12.read());
+    BLUE  = static_cast<uint8_t>(HC12.read());
+
+    Serial.println("Data received: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+  }
+}
+
+void check_button() {
   if (digitalRead(BUTTON_PIN) == HIGH) {
     CRGB color;
     CRGBQueue.pop(&color);
@@ -188,14 +220,6 @@ void loop() {
     Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
     delay(200);  // delay to prevent multiple pops
   }
-
-  /// NOTE: uncomment for actual implementation
-  // always-on LED will be 25% brightness of the current color
-  // onLED();
-
-  validate_IR(IrReceiver);
-
-  piezo_trigger();
 }
 
 /**
