@@ -481,265 +481,270 @@ void toggleOnOff() {
  * @return -1 if the IR hex code is invalid
  */
 int processHexCode(int IRvalue) {
-      /*
-      * process codes
-      */
-    switch(IRvalue) {
-      // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
+  /*
+  * process codes
+  */
+  switch(IRvalue) {
+    // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
 
-      // increase brightness
-      case 0x5C:
-        FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
-        break;
-      // decrease brightness
-      case 0x5D:
-        FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
-        break;
-      // play/pause
-      case 0x41:
-        // reverse lit status
-        toggleOnOff();
-        break;
-      // PWR
-      case 0x40:
-        if (!modifier) {
-          modifier = true;    // trigger alt modifier for next input
-          led[0] = CRGB(0, 0, MAX_INTENSITY);
-          FastLED.show();
-          Serial.println("Modifier ON");
-        } else {
-          modifier = false;
-          led[0] = CRGB(0, 0, 0);
-          FastLED.show();
-          Serial.println("Modifier OFF");
-        }
-        break;
-
-      // ==================== row 2 | Color ==========================================
-      case 0x58:
-        setColor(CRGB::Red);
-        break;
-      case 0x59:
-        setColor(CRGB::Green);
-        break;
-      case 0x45:
-        setColor(CRGB::Blue);
-        break;
-      case 0x44:
-        setColor(CRGB::White);
-        break;
-
-      // ==================== row 3 | Color ==========================================
-      case 0x54:
-        setColor(CRGB::Orange);
-        break;
-      case 0x55:
-        setColor(CRGB::LawnGreen);
-        break;
-      case 0x49:
-        setColor(CRGB::Aqua);
-        break;
-
-      case 0x48:
-        setColor(CRGB::DeepPink);
-        break;
-
-      // ==================== row 4 | Color ==========================================
-      case 0x50:
-        setColor(CRGB::Gold);
-        break;
-      case 0x51:
-        setColor(CRGB::Cyan);
-        break;
-      case 0x4D:
-        setColor(CRGB::DarkViolet);
-        break;
-      case 0x4C:
-        setColor(CRGB::Coral);
-        break;
-
-      // ==================== row 5 | Color ==========================================
-      case 0x1C:
-        setColor(CRGB::DarkGoldenrod);
-        break;
-      case 0x1D:
-        setColor(CRGB::DarkCyan);
-        break;
-      case 0x1E:
-        setColor(CRGB::Magenta);
-        break;
-      case 0x1F:
-        setColor(CRGB::PowderBlue);
-        break;
-
-      // ==================== row 6 | Color ==========================================
-      case 0x18:
-        setColor(CRGB::Yellow);
-        break;
-      case 0x19:
-        setColor(CRGB::DarkTurquoise);
-        break;
-      case 0x1A:
-        setColor(CRGB::DeepPink);
-        break;
-      case 0x1B:
-        setColor(CRGB::LightSteelBlue);
-        break;
-
-      // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
-
-      case 0x14:
-        adj_color(RED, MAX_INTENSITY/10);
-        break;
-      case 0x15:
-        adj_color(GREEN, MAX_INTENSITY/10);
-        break;
-      case 0x16:
-        adj_color(BLUE, MAX_INTENSITY/10);
-        break;
-      // QUICK | Sensitivity down
-      case 0x17:
-      {
-        if (!modifier) {
-          // increase sensitivity
-          PIEZO_THRESH -= 50;
-          if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
-            PIEZO_THRESH = 10;
-          }
-        } else {
-          modifier = false;
-          // decrease delay (quicker flash)
-          DELAY_THRESHOLD -= 50;
-          led[0] = CRGB(0, 0, 0);
-          FastLED.show();
-        }
-        break;
+    // increase brightness
+    case 0x5C:
+      FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
+      break;
+    // decrease brightness
+    case 0x5D:
+      FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
+      break;
+    // play/pause
+    case 0x41:
+      // reverse lit status
+      toggleOnOff();
+      break;
+    // PWR
+    case 0x40:
+      if (!modifier) {
+        modifier = true;    // trigger alt modifier for next input
+        led[0] = CRGB(0, 0, MAX_INTENSITY);
+        FastLED.show();
+        Serial.println("Modifier ON");
+        return;
+      } else {
+        modifier = false;
+        led[0] = CRGB(0, 0, 0);
+        FastLED.show();
+        Serial.println("Modifier OFF");
       }
-      // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
+      break;
 
-      case 0x10:
-        adj_color(RED, MAX_INTENSITY/-10);
-        break;
-      case 0x11:
-        adj_color(GREEN, MAX_INTENSITY/-10);
-        break;
-      case 0x12:
-        adj_color(BLUE, MAX_INTENSITY/-10);
-        break;
-      // SLOW | Sensitivity up
-      case 0x13:
-      {
-        if (!modifier) {
-          // decrease sensitivity
-          PIEZO_THRESH += 50;
-          if (PIEZO_THRESH >= 1023) {
-            PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
-          }
-        } else {
-          modifier = false;
-          // increase delay (slower flash)
-          DELAY_THRESHOLD += 50;
-          led[0] = CRGB(0, 0, 0);
-          FastLED.show();
+    // ==================== row 2 | Color ==========================================
+    case 0x58:
+      setColor(CRGB::Red);
+      break;
+    case 0x59:
+      setColor(CRGB::Green);
+      break;
+    case 0x45:
+      setColor(CRGB::Blue);
+      break;
+    case 0x44:
+      setColor(CRGB::White);
+      break;
+
+    // ==================== row 3 | Color ==========================================
+    case 0x54:
+      setColor(CRGB::Orange);
+      break;
+    case 0x55:
+      setColor(CRGB::LawnGreen);
+      break;
+    case 0x49:
+      setColor(CRGB::Aqua);
+      break;
+
+    case 0x48:
+      setColor(CRGB::DeepPink);
+      break;
+
+    // ==================== row 4 | Color ==========================================
+    case 0x50:
+      setColor(CRGB::Gold);
+      break;
+    case 0x51:
+      setColor(CRGB::Cyan);
+      break;
+    case 0x4D:
+      setColor(CRGB::DarkViolet);
+      break;
+    case 0x4C:
+      setColor(CRGB::Coral);
+      break;
+
+    // ==================== row 5 | Color ==========================================
+    case 0x1C:
+      setColor(CRGB::DarkGoldenrod);
+      break;
+    case 0x1D:
+      setColor(CRGB::DarkCyan);
+      break;
+    case 0x1E:
+      setColor(CRGB::Magenta);
+      break;
+    case 0x1F:
+      setColor(CRGB::PowderBlue);
+      break;
+
+    // ==================== row 6 | Color ==========================================
+    case 0x18:
+      setColor(CRGB::Yellow);
+      break;
+    case 0x19:
+      setColor(CRGB::DarkTurquoise);
+      break;
+    case 0x1A:
+      setColor(CRGB::DeepPink);
+      break;
+    case 0x1B:
+      setColor(CRGB::LightSteelBlue);
+      break;
+
+    // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
+
+    case 0x14:
+      adj_color(RED, MAX_INTENSITY/10);
+      break;
+    case 0x15:
+      adj_color(GREEN, MAX_INTENSITY/10);
+      break;
+    case 0x16:
+      adj_color(BLUE, MAX_INTENSITY/10);
+      break;
+    // QUICK | Sensitivity down
+    case 0x17:
+    {
+      if (!modifier) {
+        // increase sensitivity
+        PIEZO_THRESH -= 50;
+        if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
+          PIEZO_THRESH = 10;
         }
-        break;
+      } else {
+        modifier = false;
+        // decrease delay (quicker flash)
+        DELAY_THRESHOLD -= 50;
+        led[0] = CRGB(0, 0, 0);
+        FastLED.show();
       }
-      // ==================== row 9 | DIY 1-3, AUTO ====================================
-
-
-      // DIY1
-      case 0xC:
-      {
-        // loop until IR signal is received
-        while (true) {
-          // continue checking for valid IR signal
-          if (IrReceiver.decode()) {
-            if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
-              break;
-            }
-            IrReceiver.resume();    // resume IR input
-          }
-          ripple();
-        }
-        break;
-      }
-      // DIY2
-      case 0xD:
-      {
-        while (true) {
-          // continue checking for valid IR signal
-          if (IrReceiver.decode()) {
-            if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
-              break;
-            }
-            IrReceiver.resume();    // resume IR input
-          }
-          ripple2();
-        }
-        break;
-      }
-      //DIY3
-      case 0xE:
-        // check current color queue
-        check_colorQueue();
-        break;
-      // AUTO(save) | IR lock
-      case 0xF:
-      {
-        if (!modifier) {
-          eeprom_save(RED, GREEN, BLUE);    // save current color
-          EEPROM.write(RAINBOW_ADDR, rainbow);
-          flashConfirm();                   // flash to confirm save
-        } else {
-          modifier = false;
-          // lock IR signal
-          IR_lock = true;
-          Serial.println("IR locked");
-        }
-        break;
-      }
-      // ==================== row 10 | DIY 4-6, FLASH ====================================
-
-      // DIY4
-      case 0x8:
-        rainbow_effect();
-        break;
-      // DIY5
-      case 0x9:
-        break;
-      // DIY6
-      case 0xA:
-        break;
-      // FLASH
-      case 0xB:
-        // modify the type of flash
-        break;
-
-      // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ========================
-
-      // JUMP3
-      case 0x4:
-        // Rainbow color effect
-        rainbow = true;
-        return;   // return early to prevent color change
-      // JUMP7
-      case 0x5:
-        // other rainbow effect
-        break;
-      // FADE3
-      case 0x6:
-        break;
-      // FADE7
-      case 0x7:
-        break;
-      
-      // Default print error for debug
-      default:
-        Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
-        flashError(2);
-        return -1;
+      break;
     }
+    // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
+
+    case 0x10:
+      adj_color(RED, MAX_INTENSITY/-10);
+      break;
+    case 0x11:
+      adj_color(GREEN, MAX_INTENSITY/-10);
+      break;
+    case 0x12:
+      adj_color(BLUE, MAX_INTENSITY/-10);
+      break;
+    // SLOW | Sensitivity up
+    case 0x13:
+    {
+      if (!modifier) {
+        // decrease sensitivity
+        PIEZO_THRESH += 50;
+        if (PIEZO_THRESH >= 1023) {
+          PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
+        }
+      } else {
+        modifier = false;
+        // increase delay (slower flash)
+        DELAY_THRESHOLD += 50;
+        led[0] = CRGB(0, 0, 0);
+        FastLED.show();
+      }
+      break;
+    }
+    // ==================== row 9 | DIY 1-3, AUTO ====================================
+
+
+    // DIY1
+    case 0xC:
+    {
+      // loop until IR signal is received
+      while (true) {
+        // continue checking for valid IR signal
+        if (IrReceiver.decode()) {
+          if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
+            break;
+          }
+          IrReceiver.resume();    // resume IR input
+        }
+        ripple();
+      }
+      break;
+    }
+    // DIY2
+    case 0xD:
+    {
+      while (true) {
+        // continue checking for valid IR signal
+        if (IrReceiver.decode()) {
+          if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
+            break;
+          }
+          IrReceiver.resume();    // resume IR input
+        }
+        ripple2();
+      }
+      break;
+    }
+    //DIY3
+    case 0xE:
+      // check current color queue
+      check_colorQueue();
+      break;
+    // AUTO(save) | IR lock
+    case 0xF:
+    {
+      if (!modifier) {
+        eeprom_save(RED, GREEN, BLUE);    // save current color
+        EEPROM.write(RAINBOW_ADDR, rainbow);
+        flashConfirm();                   // flash to confirm save
+      } else {
+        modifier = false;
+        // lock IR signal
+        IR_lock = true;
+        Serial.println("IR locked");
+      }
+      break;
+    }
+    // ==================== row 10 | DIY 4-6, FLASH ====================================
+
+    // DIY4
+    case 0x8:
+      rainbow_effect();
+      break;
+    // DIY5
+    case 0x9:
+      break;
+    // DIY6
+    case 0xA:
+      break;
+    // FLASH
+    case 0xB:
+      // modify the type of flash
+      break;
+
+    // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ========================
+
+    // JUMP3
+    case 0x4:
+      // Rainbow color effect
+      rainbow = true;
+      return;   // return early to prevent color change
+    // JUMP7
+    case 0x5:
+      // other rainbow effect
+      break;
+    // FADE3
+    case 0x6:
+      break;
+    // FADE7
+    case 0x7:
+      break;
+    
+    // Default print error for debug
+    default:
+      Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
+      flashError(2);
+      return -1;
+  }
+
   rainbow = false;
+  modifier = false;
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+  FastLED.show();
   return IRvalue;
 }
 
