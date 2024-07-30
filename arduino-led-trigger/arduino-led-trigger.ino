@@ -198,6 +198,13 @@ void loop() {
   piezo_trigger();
 }
 
+/**
+ * @brief Receives transmitter data if available
+ * 
+ * This function will check transmitter data values red, green, blue when available.
+ * 
+ * @return N/A
+ */
 void check_rx() {
   if (HC12.available() >= 3) {
     // read data
@@ -209,6 +216,14 @@ void check_rx() {
   }
 }
 
+/**
+ * @brief Checks the button for input
+ * 
+ * This function will check the button for input. On input, the color from the queue
+ * will be popped and set as the current color.
+ * 
+ * @return N/A
+ */
 void check_button() {
   if (digitalRead(BUTTON_PIN) == HIGH) {
     CRGB color;
