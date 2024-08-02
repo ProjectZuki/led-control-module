@@ -39,36 +39,52 @@ decode_results results;
 
 // All known IR hex codes
 const uint32_t known_hex_codes[] = {
-  // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
+  // ==================== row 1 - Brightness UP/DOWN, play/pause, power ========
   0x5C, 0x5D, 0x41, 0x40,
-  // ==================== row 2 | Color ==========================================
+  // ==================== row 2 | Color ========================================
   0x58, 0x59, 0x45, 0x44,
-  // ==================== row 3 | Color ==========================================
+  // ==================== row 3 | Color ========================================
   0x54, 0x55, 0x49, 0x48,
-  // ==================== row 4 | Color ==========================================
+  // ==================== row 4 | Color ========================================
   0x50, 0x51, 0x4D, 0x4C,
-  // ==================== row 5 | Color ==========================================
+  // ==================== row 5 | Color ========================================
   0x1C, 0x1D, 0x1E, 0x1F,
-  // ==================== row 6 | Color ==========================================
+  // ==================== row 6 | Color ========================================
   0x18, 0x19, 0x1A, 0x1B,
-  // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
+  // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===============
   0x14, 0x15, 0x16, 0x17,
-  // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
+  // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ================
   0x10, 0x11, 0x12, 0x13,
-  // ==================== row 9 | DIY 1-3, AUTO ====================================
+  // ==================== row 9 | DIY 1-3, AUTO ================================
   0xC, 0xD, 0xE, 0xF,
-  // ==================== row 10 | DIY 4-6, FLASH ====================================
+  // ==================== row 10 | DIY 4-6, FLASH ==============================
   0x8, 0x9, 0xA, 0xB,
-  // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ========================
+  // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ==================
   0x4, 0x5, 0x6, 0x7
 };
 
-uint8_t RED = 0;
-uint8_t GREEN = 0;
-uint8_t BLUE = 0;
+// uint8_t RED = 0;
+// uint8_t GREEN = 0;
+// uint8_t BLUE = 0;
 
 bool ledon = false;
 bool rainbow = false;
+
+int hexValue = 0;
+
+unsigned long previousMillis = 0;
+const unsigned long debounceDelay = 250;
+
+struct dataPacket {
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+  bool ledon;
+  bool rainbow;
+  uint8_t checksum;
+};
+
+dataPacket packet;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -79,32 +95,8 @@ void setup() {
 }
 
 void loop() {
-    uint8_t prevred = RED;
-    uint8_t prevgreen = GREEN;
-    uint8_t prevblue = BLUE;
-
+    // check for IR signal
     validate_IR(IrReceiver);
-
-    if (prevred != RED || prevgreen != GREEN || prevblue != BLUE) {
-        transmit_data();
-        Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
-    }
-}
-
-/**
- * @brief Sends data to the HC-12 module
- * 
- * This function will send the data to the HC-12 module.
- * 
- * @param red red value to send
- * @param green green value to send
- * @param blue blue value to send
- * @return N/A
- */
-void send_data(byte red, byte green, byte blue) {
-    HC12.write(red);    // Send red value
-    HC12.write(green);  // Send green value
-    HC12.write(blue);   // Send blue value
 }
 
 /**
@@ -151,10 +143,18 @@ void validate_IR(IRrecv IrReceiver) {
         // process IR signal
         if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
           Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+        } else {
+          // trasnmit data on valid IR signal code, repeats allowed
+          transmit_data();
         }
+
+        previousMillis = millis();
       }
     }
-    delay(500); // delay to prevent multiple inputs
+    if (millis() - previousMillis >= debounceDelay) {
+      // reset IR signal
+      IrReceiver.resume();
+    }
   }
 
 /**
@@ -165,11 +165,29 @@ void validate_IR(IRrecv IrReceiver) {
  * @return N/A
  */
 void transmit_data() {
-  HC12.write(RED);    // Send red value
-  HC12.write(GREEN);  // Send green value
-  HC12.write(BLUE);   // Send blue value
+  Serial.println("Transmitting data..." + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
+  Serial.println("LED: " + String(packet.ledon) + ", Rainbow: " + String(packet.rainbow));
 
-//   HC12.write(ledon);
+  // use checksum to validate data integrity
+  packet.checksum = calculateChecksum(packet);
+
+  // redundancy to ensure data is sent
+  for (int i = 0; i < 5; i++){
+    // transmit data
+    HC12.write((byte*)&packet, sizeof(packet));
+    delay(100);
+  }
+}
+
+/**
+ * @brief Calculate checksum
+ * 
+ * This function will calculate the checksum value for sending the package data
+ * 
+ * @return N/A
+ */
+uint8_t calculateChecksum(dataPacket& packet) {
+  return packet.red + packet.green + packet.blue + packet.ledon + packet.rainbow;
 }
 
 /**
@@ -190,14 +208,16 @@ int processHexCode(int IRvalue) {
 
     // increase brightness
     case 0x5C:
+      // FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
       break;
     // decrease brightness
     case 0x5D:
+      // FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
       break;
     // play/pause
     case 0x41:
       // reverse lit status
-      ledon = true;
+      packet.ledon =  !packet.ledon;
       break;
     // PWR
     case 0x40:
@@ -277,13 +297,13 @@ int processHexCode(int IRvalue) {
     // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
 
     case 0x14:
-      adj_color(RED, MAX_INTENSITY/10);
+      adj_color(packet.red, MAX_INTENSITY/10);
       break;
     case 0x15:
-      adj_color(GREEN, MAX_INTENSITY/10);
+      adj_color(packet.green, MAX_INTENSITY/10);
       break;
     case 0x16:
-      adj_color(BLUE, MAX_INTENSITY/10);
+      adj_color(packet.blue, MAX_INTENSITY/10);
       break;
     // QUICK | Sensitivity down
     case 0x17:
@@ -306,13 +326,13 @@ int processHexCode(int IRvalue) {
     // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
 
     case 0x10:
-      adj_color(RED, MAX_INTENSITY/-10);
+      adj_color(packet.red, MAX_INTENSITY/-10);
       break;
     case 0x11:
-      adj_color(GREEN, MAX_INTENSITY/-10);
+      adj_color(packet.green, MAX_INTENSITY/-10);
       break;
     case 0x12:
-      adj_color(BLUE, MAX_INTENSITY/-10);
+      adj_color(packet.blue, MAX_INTENSITY/-10);
       break;
     // SLOW | Sensitivity up
     case 0x13:
@@ -396,7 +416,7 @@ int processHexCode(int IRvalue) {
     // JUMP3
     case 0x4:
       // Rainbow color effect
-      rainbow = true;
+      packet.rainbow = true;
       return;   // return early to prevent color change
     // JUMP7
     case 0x5:
@@ -434,11 +454,10 @@ int processHexCode(int IRvalue) {
  */
 void setColor(CRGB color) {
   // set new RGB values, constrain to max intensity value
-  RED = scale8(color.r, MAX_INTENSITY);
-  GREEN = scale8(color.g, MAX_INTENSITY);
-  BLUE = scale8(color.b, MAX_INTENSITY);
+  packet.red = scale8(color.r, MAX_INTENSITY);
+  packet.green = scale8(color.g, MAX_INTENSITY);
+  packet.blue = scale8(color.b, MAX_INTENSITY);
 }
-
 
 /**
  * @brief Adjusts the color value

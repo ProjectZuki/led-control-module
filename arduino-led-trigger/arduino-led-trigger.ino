@@ -80,6 +80,8 @@ decode_results results;
 bool modifier = false;
 // IR lock
 bool IR_lock = false;
+// always on
+bool ledon2 = false;
 
 // delay threshold for flash duration
 int DELAY_THRESHOLD = 100;
@@ -108,6 +110,17 @@ CRGB RainbowColors[] = {
   CRGB::Indigo,
   CRGB::Violet
 };
+
+struct dataPacket {
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+  bool ledon;
+  bool rainbow;
+  uint8_t checksum;
+};
+
+dataPacket packet;
 
 // All known IR hex codes
 const uint32_t known_hex_codes[] = {
@@ -206,14 +219,31 @@ void loop() {
  * @return N/A
  */
 void check_rx() {
-  if (HC12.available() >= 3) {
-    // read data
-    RED   = static_cast<uint8_t>(HC12.read());
-    GREEN = static_cast<uint8_t>(HC12.read());
-    BLUE  = static_cast<uint8_t>(HC12.read());
 
-    Serial.println("Data received: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+  if (HC12.available() >= sizeof(dataPacket)) {
+    dataPacket packet;
+    HC12.readBytes((byte*)&packet, sizeof(packet));
+
+    // validate integrity
+    if (packet.checksum == calculateChecksum(packet)) {
+      Serial.println("Data received: " + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
+      Serial.println("LED on: " + String(packet.ledon));
+      Serial.println();
+
+      RED = packet.red;
+      GREEN = packet.green;
+      BLUE = packet.blue;
+      ledon2 = packet.ledon;
+      rainbow = packet.rainbow;
+    } else {
+      Serial.println("ERROR: checksum mismatch, possible data corruption");
+      Serial.println("NOTE: Initializing of data may cause this error on first startup");
+    }
   }
+}
+
+uint8_t calculateChecksum(dataPacket& packet) {
+  return packet.red + packet.green + packet.blue + packet.ledon + packet.rainbow;
 }
 
 /**
@@ -322,11 +352,7 @@ void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
   EEPROM.write(RED_ADDR, red);
   EEPROM.write(GREEN_ADDR, green);
-  EEPROM.write(BLUE_ADDR, blue);
-
-  // add to queue
-  push_queue(red, green, blue);
-  
+  EEPROM.write(BLUE_ADDR, blue);  
 }
 
 /**
@@ -629,13 +655,13 @@ int processHexCode(int IRvalue) {
     // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
 
     case 0x14:
-      adj_color(RED, MAX_INTENSITY/10);
+      adj_color(RED, MAX_INTENSITY/5);
       break;
     case 0x15:
-      adj_color(GREEN, MAX_INTENSITY/10);
+      adj_color(GREEN, MAX_INTENSITY/5);
       break;
     case 0x16:
-      adj_color(BLUE, MAX_INTENSITY/10);
+      adj_color(BLUE, MAX_INTENSITY/5);
       break;
     // QUICK | Sensitivity down
     case 0x17:
@@ -658,13 +684,13 @@ int processHexCode(int IRvalue) {
     // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
 
     case 0x10:
-      adj_color(RED, MAX_INTENSITY/-10);
+      adj_color(RED, MAX_INTENSITY/-5);
       break;
     case 0x11:
-      adj_color(GREEN, MAX_INTENSITY/-10);
+      adj_color(GREEN, MAX_INTENSITY/-5);
       break;
     case 0x12:
-      adj_color(BLUE, MAX_INTENSITY/-10);
+      adj_color(BLUE, MAX_INTENSITY/-5);
       break;
     // SLOW | Sensitivity up
     case 0x13:
@@ -720,6 +746,8 @@ int processHexCode(int IRvalue) {
     }
     //DIY3
     case 0xE:
+      // add to color queue
+      push_queue(RED, GREEN, BLUE);
       // check current color queue
       check_colorQueue();
       break;
@@ -818,7 +846,7 @@ void adj_color(uint8_t& color, int scale) {
   int newColor = color + scale;
 
   // Constrain new color value to be within 1 and MAX_INTENSITY
-  newColor = constrain(newColor, 1, MAX_INTENSITY);
+  newColor = constrain(newColor, 0, MAX_INTENSITY);
 
   // Set the adjusted color value
   color = newColor;
