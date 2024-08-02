@@ -80,7 +80,7 @@ struct dataPacket {
   uint8_t green;
   uint8_t blue;
   bool ledon;
-  bool rainbow;
+  bool rainboweffect;
   uint8_t checksum;
 };
 
@@ -166,7 +166,7 @@ void validate_IR(IRrecv IrReceiver) {
  */
 void transmit_data() {
   Serial.println("Transmitting data..." + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
-  Serial.println("LED: " + String(packet.ledon) + ", Rainbow: " + String(packet.rainbow));
+  Serial.println("LED: " + String(packet.ledon) + ", Rainbow: " + String(packet.rainboweffect));
 
   // use checksum to validate data integrity
   packet.checksum = calculateChecksum(packet);
@@ -187,7 +187,7 @@ void transmit_data() {
  * @return N/A
  */
 uint8_t calculateChecksum(dataPacket& packet) {
-  return packet.red + packet.green + packet.blue + packet.ledon + packet.rainbow;
+  return packet.red + packet.green + packet.blue + packet.ledon + packet.rainboweffect;
 }
 
 /**
@@ -399,7 +399,10 @@ int processHexCode(int IRvalue) {
     // DIY4
     case 0x8:
     //   rainbow_effect();
-      break;
+      // break;
+      /// TODO: Rainbow effect, not rainbow color scheme. Create packet.raninboweffect
+      packet.rainboweffect = !packet.rainboweffect;
+      return;
     // DIY5
     case 0x9:
       break;
@@ -416,7 +419,7 @@ int processHexCode(int IRvalue) {
     // JUMP3
     case 0x4:
       // Rainbow color effect
-      packet.rainbow = true;
+      // packet.rainbow = true;
       return;   // return early to prevent color change
     // JUMP7
     case 0x5:

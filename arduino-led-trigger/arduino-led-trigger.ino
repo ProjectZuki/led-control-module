@@ -81,7 +81,8 @@ bool modifier = false;
 // IR lock
 bool IR_lock = false;
 // always on
-bool ledon2 = false;
+bool ledonrx = false;
+bool rainbowrx = false;
 
 // delay threshold for flash duration
 int DELAY_THRESHOLD = 100;
@@ -206,6 +207,13 @@ void loop() {
   // always-on LED will be 25% brightness of the current color
   // onLED();
 
+  if (ledonrx) {
+    toggleOnOff();
+  }
+  if (rainbowrx) {
+    rainbow_effect();
+  }
+
   validate_IR(IrReceiver);
 
   piezo_trigger();
@@ -227,14 +235,14 @@ void check_rx() {
     // validate integrity
     if (packet.checksum == calculateChecksum(packet)) {
       Serial.println("Data received: " + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
-      Serial.println("LED on: " + String(packet.ledon));
+      Serial.println("LED on: " + String(packet.ledon)  + ", Rainbow: " + String(packet.rainbow));
       Serial.println();
 
       RED = packet.red;
       GREEN = packet.green;
       BLUE = packet.blue;
-      ledon2 = packet.ledon;
-      rainbow = packet.rainbow;
+      ledonrx = packet.ledon;
+      rainbowrx = packet.rainbow;
     } else {
       Serial.println("ERROR: checksum mismatch, possible data corruption");
       Serial.println("NOTE: Initializing of data may cause this error on first startup");
@@ -242,6 +250,14 @@ void check_rx() {
   }
 }
 
+/**
+ * @brief Calculates the checksum for the data packet
+ * 
+ * This function will calculate the checksum for the data packet.
+ * 
+ * @param packet the data packet to calculate the checksum
+ * @return the checksum value
+ */
 uint8_t calculateChecksum(dataPacket& packet) {
   return packet.red + packet.green + packet.blue + packet.ledon + packet.rainbow;
 }
@@ -403,13 +419,16 @@ void irlock() {
 
     // check IR signal for unlock
     /// TODO: Maybe have 0x40 (PWR) input again to modify, then lock to prevent accidentally doing more than intended
-    if (IrReceiver.decode()) {
-      if (IrReceiver.decodedIRData.command == 0xF) {
-        IR_lock = false; // Unlock IR signal
-        Serial.println("IR unlocked");
-      }
-      IrReceiver.resume(); // Prepare to receive the next IR signal
-    }
+    // if (IrReceiver.decode()) {
+    //   if (IrReceiver.decodedIRData.command == 0xF) {
+    //     IR_lock = false; // Unlock IR signal
+    //     Serial.println("IR unlocked");
+    //   }
+    //   IrReceiver.resume(); // Prepare to receive the next IR signal
+    // }
+
+    check_rx();
+    validate_IR(IrReceiver);
 
     // Check the piezo sensor
     piezo_trigger();
@@ -532,6 +551,13 @@ void toggleOnOff() {
       onLED();
       delay(200);  // delay to reduce multiple inputs
       IrReceiver.resume();
+    } else {
+      check_rx();
+      ledon = ledonrx;
+      if (!ledon) {
+        // reset
+        offARGB();
+      }
     }
   }
 }
@@ -988,6 +1014,12 @@ void rainbow_effect() {
       }
       FastLED.show();
       delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
+      // check_rx();
+      // if (!rainbowrx) {
+      //   // reset
+      //   offARGB();
+      //   break;
+      // }
     }
   }
 }
