@@ -163,6 +163,9 @@ bool validate_IR(IRrecv IrReceiver) {
     return false;
   }
 
+const uint8_t START_MARKER = 0x7E; // '~'
+const uint8_t END_MARKER = 0x7F; // ASCII DEL
+
 /**
  * @brief Transmit data for red, green, blue
  * 
@@ -171,27 +174,35 @@ bool validate_IR(IRrecv IrReceiver) {
  * @return N/A
  */
 void transmit_data() {
-  Serial.println("Transmitting data..." + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
-  Serial.println("LED: " + String(packet.ledon) + ", Rainbow: " + String(packet.rainboweffect));
-
-  // use checksum to validate data integrity
   packet.checksum = calculateChecksum(packet);
 
-  // redundancy to ensure data is sent
-  for (int i = 0; i < 5; i++){
-    // transmit data
+  // Debug print for packet
+  Serial.print("Transmitting data... ");
+  Serial.print("Red: "); Serial.print(packet.red);
+  Serial.print(", Green: "); Serial.print(packet.green);
+  Serial.print(", Blue: "); Serial.print(packet.blue);
+  Serial.print(", LED: "); Serial.print(packet.ledon);
+  Serial.print(", Rainbow: "); Serial.print(packet.rainboweffect);
+  Serial.print(", Checksum: "); Serial.println(packet.checksum);
+
+  // Debug print for raw bytes
+  byte* ptr = (byte*)&packet;
+  Serial.print("Raw bytes: ");
+  for (int i = 0; i < sizeof(packet); i++) {
+    Serial.print(ptr[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+
+  // Transmit data with start and end markers
+  for (int i = 0; i < 5; i++) {
+    HC12.write(START_MARKER);
     HC12.write((byte*)&packet, sizeof(packet));
+    HC12.write(END_MARKER);
     delay(100);
   }
 }
 
-/**
- * @brief Calculate checksum
- * 
- * This function will calculate the checksum value for sending the package data
- * 
- * @return N/A
- */
 uint8_t calculateChecksum(const dataPacket& packet) {
   uint8_t checksum = 0;
   checksum += packet.red;

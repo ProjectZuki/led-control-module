@@ -585,8 +585,7 @@ void toggleOnOff() {
       onLED();
       delay(200);  // delay to reduce multiple inputs
       IrReceiver.resume();
-    } else {
-      check_rx();
+    } else if (check_rx()) {
       ledon = ledonrx;
       if (!ledon) {
         // reset
