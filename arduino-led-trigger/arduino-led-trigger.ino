@@ -67,7 +67,7 @@ cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
 
 // piezo pin
 #define PIEZO_PIN     A0
-unsigned int PIEZO_THRESH = 500;
+unsigned int PIEZO_THRESH = 300;
  
 // // always on mode
 // bool ledon = false;
@@ -199,7 +199,7 @@ void loop() {
   // turn on built in LED to confirm functionality
   // digitalWrite(LED_BUILTIN, HIGH);
 
-  check_rx();
+  // check_rx();
 
   check_button();
 
@@ -207,14 +207,18 @@ void loop() {
   // always-on LED will be 25% brightness of the current color
   // onLED();
 
-  if (ledonrx) {
-    toggleOnOff();
-  }
-  if (rainbowrx) {
-    rainbow_effect();
+  // check for either IR or transmitter data
+  if (!validate_IR(IrReceiver)) {
+    check_rx();
   }
 
-  validate_IR(IrReceiver);
+  if (ledonrx) {
+    rainbowrx = false;
+    toggleOnOff();
+  } else if (rainbowrx) {
+    ledonrx = false;
+    rainbow_effect();
+  }
 
   piezo_trigger();
 }
@@ -226,28 +230,70 @@ void loop() {
  * 
  * @return N/A
  */
-void check_rx() {
+// Calculate checksum excluding the checksum field itself
+uint8_t calculateChecksum(const dataPacket& packet) {
+  uint8_t checksum = 0;
+  const uint8_t* ptr = (const uint8_t*)&packet;
 
+  // Calculate checksum for the packet excluding the checksum field itself
+  for (size_t i = 0; i < sizeof(packet) - sizeof(packet.checksum); ++i) {
+    checksum += ptr[i];
+  }
+  return checksum;
+}
+
+// Function to initialize and calculate the checksum before sending
+void preparePacket(dataPacket& packet) {
+  packet.red = 0; // Example value
+  packet.green = 0; // Example value
+  packet.blue = 0; // Example value
+  packet.ledon = false; // Example value
+  packet.rainbow = false; // Example value
+  packet.checksum = calculateChecksum(packet); // Calculate checksum
+}
+
+// Transmit function
+void transmitPacket() {
+  dataPacket packet;
+  preparePacket(packet); // Initialize and calculate checksum
+  HC12.write((byte*)&packet, sizeof(packet)); // Transmit packet
+}
+
+// Receive and validate function
+bool check_rx() {
   if (HC12.available() >= sizeof(dataPacket)) {
     dataPacket packet;
     HC12.readBytes((byte*)&packet, sizeof(packet));
 
-    // validate integrity
-    if (packet.checksum == calculateChecksum(packet)) {
-      Serial.println("Data received: " + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
-      Serial.println("LED on: " + String(packet.ledon)  + ", Rainbow: " + String(packet.rainbow));
-      Serial.println();
+    // Calculate the checksum of the received packet
+    uint8_t calculatedChecksum = calculateChecksum(packet);
 
+    // Debug prints for received packet and calculated checksum
+    Serial.println("Received packet: " + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
+    Serial.println("Received LED: " + String(packet.ledon) + ", Rainbow: " + String(packet.rainbow));
+    Serial.println("Received checksum: " + String(packet.checksum));
+    Serial.println("Calculated checksum: " + String(calculatedChecksum));
+
+    // Validate integrity
+    if (packet.checksum == calculatedChecksum) {
+      // Update your variables here
       RED = packet.red;
       GREEN = packet.green;
       BLUE = packet.blue;
       ledonrx = packet.ledon;
       rainbowrx = packet.rainbow;
+      return true;
     } else {
       Serial.println("ERROR: checksum mismatch, possible data corruption");
       Serial.println("NOTE: Initializing of data may cause this error on first startup");
+      // Clear the buffer if checksum mismatch
+      while (HC12.available() > 0) {
+        HC12.read();
+      }
+      delay(50); // delay to avoid immediate re-read
     }
   }
+  return false;
 }
 
 /**
@@ -310,7 +356,7 @@ bool check_hex_code(uint32_t hex_code) {
  * @param IrReceiver the IRrecv object reading infrared signals
  * @return N/A
  */
-void validate_IR(IRrecv IrReceiver) {
+bool validate_IR(IRrecv IrReceiver) {
   // IR remote instructions
   if (IrReceiver.decode()) {
     if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
@@ -318,7 +364,7 @@ void validate_IR(IRrecv IrReceiver) {
       // We have an unknown protocol here, print extended info
       IrReceiver.printIRResultRawFormatted(&Serial, true);
       IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
-      return;
+      return false;
     } else {
       IrReceiver.resume(); // Early enable receiving of the next IR frame
       IrReceiver.printIRResultShort(&Serial);
@@ -331,14 +377,19 @@ void validate_IR(IRrecv IrReceiver) {
         if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
           Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
           flashError(1);
+          return false;
         }
+        return true;
       }
     }
     Serial.println();
 
 
     delay(500); // delay to prevent multiple inputs
+  } else {
+    return false;
   }
+  return false;
 }
 
 /**
@@ -1014,12 +1065,13 @@ void rainbow_effect() {
       }
       FastLED.show();
       delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
-      // check_rx();
-      // if (!rainbowrx) {
-      //   // reset
-      //   offARGB();
-      //   break;
-      // }
+      
+      check_rx();
+      if (!rainbowrx) {
+        // reset
+        offARGB();
+        return;
+      }
     }
   }
 }

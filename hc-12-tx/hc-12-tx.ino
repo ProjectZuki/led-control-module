@@ -96,7 +96,10 @@ void setup() {
 
 void loop() {
     // check for IR signal
-    validate_IR(IrReceiver);
+    if (validate_IR(IrReceiver)) {
+      // transmit data
+      transmit_data();
+    }
 }
 
 /**
@@ -126,7 +129,7 @@ bool check_hex_code(uint32_t hex_code) {
  * @param IrReceiver the IRrecv object reading infrared signals
  * @return N/A
  */
-void validate_IR(IRrecv IrReceiver) {
+bool validate_IR(IRrecv IrReceiver) {
   // IR remote instructions
   if (IrReceiver.decode()) {
     if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
@@ -143,9 +146,11 @@ void validate_IR(IRrecv IrReceiver) {
         // process IR signal
         if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
           Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+          return false;
         } else {
           // trasnmit data on valid IR signal code, repeats allowed
-          transmit_data();
+          // transmit_data();
+          return true;
         }
 
         previousMillis = millis();
@@ -155,6 +160,7 @@ void validate_IR(IRrecv IrReceiver) {
       // reset IR signal
       IrReceiver.resume();
     }
+    return false;
   }
 
 /**
@@ -186,8 +192,14 @@ void transmit_data() {
  * 
  * @return N/A
  */
-uint8_t calculateChecksum(dataPacket& packet) {
-  return packet.red + packet.green + packet.blue + packet.ledon + packet.rainboweffect;
+uint8_t calculateChecksum(const dataPacket& packet) {
+  uint8_t checksum = 0;
+  checksum += packet.red;
+  checksum += packet.green;
+  checksum += packet.blue;
+  checksum += packet.ledon;
+  checksum += packet.rainboweffect;
+  return checksum;
 }
 
 /**
@@ -400,7 +412,6 @@ int processHexCode(int IRvalue) {
     case 0x8:
     //   rainbow_effect();
       // break;
-      /// TODO: Rainbow effect, not rainbow color scheme. Create packet.raninboweffect
       packet.rainboweffect = !packet.rainboweffect;
       return;
     // DIY5
