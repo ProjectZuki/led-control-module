@@ -242,23 +242,6 @@ uint8_t calculateChecksum(const dataPacket& packet) {
   return checksum;
 }
 
-// Function to initialize and calculate the checksum before sending
-void preparePacket(dataPacket& packet) {
-  packet.red = 0; // Example value
-  packet.green = 0; // Example value
-  packet.blue = 0; // Example value
-  packet.ledon = false; // Example value
-  packet.rainbow = false; // Example value
-  packet.checksum = calculateChecksum(packet); // Calculate checksum
-}
-
-// Transmit function
-void transmitPacket() {
-  dataPacket packet;
-  preparePacket(packet); // Initialize and calculate checksum
-  HC12.write((byte*)&packet, sizeof(packet)); // Transmit packet
-}
-
 // Receive and validate function
 bool check_rx() {
   if (HC12.available() >= sizeof(dataPacket)) {
@@ -608,6 +591,10 @@ void toggleOnOff() {
       if (!ledon) {
         // reset
         offARGB();
+      } else {
+        // apply modifications to color
+        onARGB();
+        onLED();
       }
     }
   }
