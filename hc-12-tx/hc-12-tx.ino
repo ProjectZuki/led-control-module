@@ -32,6 +32,8 @@
 #define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8
 
 SoftwareSerial HC12(2, 3);  // HC-12 TX Pin, HC-12 RX Pin
+#define START_MARKER 0x7E
+#define END_MARKER 0x7F
 
 // IR
 IRrecv irrecv(IR_RECEIVER_PIN);
@@ -62,13 +64,6 @@ const uint32_t known_hex_codes[] = {
   // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ==================
   0x4, 0x5, 0x6, 0x7
 };
-
-// uint8_t RED = 0;
-// uint8_t GREEN = 0;
-// uint8_t BLUE = 0;
-
-bool ledon = false;
-bool rainbow = false;
 
 int hexValue = 0;
 
@@ -162,9 +157,6 @@ bool validate_IR(IRrecv IrReceiver) {
     }
     return false;
   }
-
-const uint8_t START_MARKER = 0x7E; // '~'
-const uint8_t END_MARKER = 0x7F; // ASCII DEL
 
 /**
  * @brief Transmit data for red, green, blue
@@ -461,7 +453,7 @@ int processHexCode(int IRvalue) {
       return -1;
   }
 
-  rainbow = false;
+  // rainbow = false;
 //   modifier = false;
 //   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
 //   FastLED.show();

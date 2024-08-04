@@ -57,6 +57,8 @@ CRGB led[NUM_LEDS];
 
 // HC-12 module
 SoftwareSerial HC12(2, 3);  // HC-12 TX Pin, HC-12 RX Pin
+#define START_MARKER 0x7E
+#define END_MARKER 0x7F
 
 uint8_t RED         = 0;
 uint8_t GREEN       = 0;
@@ -230,7 +232,6 @@ void loop() {
  * 
  * @return N/A
  */
-// Calculate checksum excluding the checksum field itself
 uint8_t calculateChecksum(const dataPacket& packet) {
   uint8_t checksum = 0;
   const uint8_t* ptr = (const uint8_t*)&packet;
@@ -242,38 +243,71 @@ uint8_t calculateChecksum(const dataPacket& packet) {
   return checksum;
 }
 
-// Receive and validate function
+/**
+ * @brief Receives transmitter data when available
+ * 
+ * This function will check transmitter data values red, green, blue, ledon, and rainboweffect when available.
+ * 
+ * @return N/A
+ */
 bool check_rx() {
-  if (HC12.available() >= sizeof(dataPacket)) {
-    dataPacket packet;
-    HC12.readBytes((byte*)&packet, sizeof(packet));
+  static bool receiving = false;
+  static byte buffer[sizeof(dataPacket)];
+  static uint8_t bufferIndex = 0;
 
-    // Calculate the checksum of the received packet
-    uint8_t calculatedChecksum = calculateChecksum(packet);
+  while (HC12.available() > 0) {
+    byte receivedByte = HC12.read();
+    
+    if (receivedByte == START_MARKER) {
+      receiving = true;
+      bufferIndex = 0;
+    } else if (receivedByte == END_MARKER) {
+      if (receiving && bufferIndex == sizeof(dataPacket)) {
+        dataPacket packet;
+        memcpy(&packet, buffer, sizeof(dataPacket));
 
-    // Debug prints for received packet and calculated checksum
-    Serial.println("Received packet: " + String(packet.red) + ", " + String(packet.green) + ", " + String(packet.blue));
-    Serial.println("Received LED: " + String(packet.ledon) + ", Rainbow: " + String(packet.rainbow));
-    Serial.println("Received checksum: " + String(packet.checksum));
-    Serial.println("Calculated checksum: " + String(calculatedChecksum));
+        // Calculate the checksum of the received packet
+        uint8_t calculatedChecksum = calculateChecksum(packet);
 
-    // Validate integrity
-    if (packet.checksum == calculatedChecksum) {
-      // Update your variables here
-      RED = packet.red;
-      GREEN = packet.green;
-      BLUE = packet.blue;
-      ledonrx = packet.ledon;
-      rainbowrx = packet.rainbow;
-      return true;
-    } else {
-      Serial.println("ERROR: checksum mismatch, possible data corruption");
-      Serial.println("NOTE: Initializing of data may cause this error on first startup");
-      // Clear the buffer if checksum mismatch
-      while (HC12.available() > 0) {
-        HC12.read();
+        // Debug prints for received packet and calculated checksum
+        Serial.print("Received packet: ");
+        Serial.print(packet.red);
+        Serial.print(", ");
+        Serial.print(packet.green);
+        Serial.print(", ");
+        Serial.print(packet.blue);
+        Serial.print(", LED: ");
+        Serial.print(packet.ledon);
+        Serial.print(", Rainbow: ");
+        Serial.println(packet.rainbow);
+        Serial.print("Received checksum: ");
+        Serial.println(packet.checksum);
+        Serial.print("Calculated checksum: ");
+        Serial.println(calculatedChecksum);
+
+        // Validate integrity
+        if (packet.checksum == calculatedChecksum) {
+          // Update your variables here
+          RED = packet.red;
+          GREEN = packet.green;
+          BLUE = packet.blue;
+          ledonrx = packet.ledon;
+          rainbowrx = packet.rainbow;
+          return true;
+        } else {
+          Serial.println("ERROR: checksum mismatch, possible data corruption");
+        }
       }
-      delay(50); // delay to avoid immediate re-read
+      receiving = false; // Reset receiving state after end marker
+    } else if (receiving) {
+      if (bufferIndex < sizeof(dataPacket)) {
+        buffer[bufferIndex++] = receivedByte;
+      } else {
+        // Buffer overflow, reset receiving
+        receiving = false;
+        bufferIndex = 0;
+        Serial.println("ERROR: Buffer overflow, resetting receiving state.");
+      }
     }
   }
   return false;
@@ -425,6 +459,22 @@ void push_queue(int red, int green, int blue) {
     CRGB color;
     CRGBQueue.peekIdx(&color, i);
     Serial.println("Queue value: " + String(color.r) + ", " + String(color.g) + ", " + String(color.b));
+  }
+
+  // show contents of queue
+  for (int i = 0; i < 3; i ++) {
+    // queue size LEDs should flash the color based on the queue
+    for (int j = 0; j < CRGBQueue.getCount(); j++) {
+      CRGB color;
+      CRGBQueue.peekIdx(&color, j);
+      led[j] = color;
+    }
+    FastLED.show();
+    delay(200);
+
+    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+    FastLED.show();
+    delay(200);
   }
 }
 
@@ -590,6 +640,7 @@ void toggleOnOff() {
       if (!ledon) {
         // reset
         offARGB();
+        offLED();
       } else {
         // apply modifications to color
         onARGB();
@@ -811,8 +862,8 @@ int processHexCode(int IRvalue) {
     case 0xE:
       // add to color queue
       push_queue(RED, GREEN, BLUE);
-      // check current color queue
-      check_colorQueue();
+      // // check current color queue
+      // check_colorQueue();
       break;
     // AUTO(save) | IR lock
     case 0xF:
@@ -840,6 +891,8 @@ int processHexCode(int IRvalue) {
       break;
     // DIY6
     case 0xA:
+      // check current color queue
+      check_colorQueue();
       break;
     // FLASH
     case 0xB:
@@ -1070,20 +1123,17 @@ void rainbow_effect() {
  * @return N/A
  */
 void check_colorQueue() {
-  for (int i = 0; i < 3; i ++) {
-    // queue size LEDs should flash the color based on the queue
-    for (int j = 0; j < CRGBQueue.getCount(); j++) {
-      CRGB color;
-      CRGBQueue.peekIdx(&color, j);
-      led[j] = color;
-    }
-    FastLED.show();
-    delay(200);
-
-    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-    FastLED.show();
-    delay(200);
+  // queue size LEDs should flash the color based on the queue
+  for (int j = 0; j < CRGBQueue.getCount(); j++) {
+    CRGB color;
+    CRGBQueue.peekIdx(&color, j);
+    led[j] = color;
   }
+  FastLED.show();
+  delay(2000);
+
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+  FastLED.show();
 }
 
 /**
