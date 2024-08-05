@@ -168,23 +168,23 @@ bool validate_IR(IRrecv IrReceiver) {
 void transmit_data() {
   packet.checksum = calculateChecksum(packet);
 
-  // Debug print for packet
-  Serial.print("Transmitting data... ");
-  Serial.print("Red: "); Serial.print(packet.red);
-  Serial.print(", Green: "); Serial.print(packet.green);
-  Serial.print(", Blue: "); Serial.print(packet.blue);
-  Serial.print(", LED: "); Serial.print(packet.ledon);
-  Serial.print(", Rainbow: "); Serial.print(packet.rainboweffect);
-  Serial.print(", Checksum: "); Serial.println(packet.checksum);
+  // // Debug print for packet
+  // Serial.print("Transmitting data... ");
+  // Serial.print("Red: "); Serial.print(packet.red);
+  // Serial.print(", Green: "); Serial.print(packet.green);
+  // Serial.print(", Blue: "); Serial.print(packet.blue);
+  // Serial.print(", LED: "); Serial.print(packet.ledon);
+  // Serial.print(", Rainbow: "); Serial.print(packet.rainboweffect);
+  // Serial.print(", Checksum: "); Serial.println(packet.checksum);
 
-  // Debug print for raw bytes
-  byte* ptr = (byte*)&packet;
-  Serial.print("Raw bytes: ");
-  for (int i = 0; i < sizeof(packet); i++) {
-    Serial.print(ptr[i], HEX);
-    Serial.print(" ");
-  }
-  Serial.println();
+  // // Debug print for raw bytes
+  // byte* ptr = (byte*)&packet;
+  // Serial.print("Raw bytes: ");
+  // for (int i = 0; i < sizeof(packet); i++) {
+  //   Serial.print(ptr[i], HEX);
+  //   Serial.print(" ");
+  // }
+  // Serial.println();
 
   // Transmit data with start and end markers
   for (int i = 0; i < 5; i++) {

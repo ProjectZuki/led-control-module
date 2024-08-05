@@ -66,6 +66,8 @@ uint8_t BLUE        = 0;
 
 // create a queue of CRGB values
 cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
+// queue for multicolor effect
+cppQueue multicolorQueue(sizeof(CRGB), 5, FIFO);
 
 // piezo pin
 #define PIEZO_PIN     A0
@@ -80,8 +82,9 @@ decode_results results;
 
 // modifier tied to PWR button
 bool modifier = false;
-// IR lock
-bool IR_lock = false;
+// multi effect
+bool multicolor = false;
+
 // always on
 bool ledonrx = false;
 bool rainbowrx = false;
@@ -269,21 +272,21 @@ bool check_rx() {
         // Calculate the checksum of the received packet
         uint8_t calculatedChecksum = calculateChecksum(packet);
 
-        // Debug prints for received packet and calculated checksum
-        Serial.print("Received packet: ");
-        Serial.print(packet.red);
-        Serial.print(", ");
-        Serial.print(packet.green);
-        Serial.print(", ");
-        Serial.print(packet.blue);
-        Serial.print(", LED: ");
-        Serial.print(packet.ledon);
-        Serial.print(", Rainbow: ");
-        Serial.println(packet.rainbow);
-        Serial.print("Received checksum: ");
-        Serial.println(packet.checksum);
-        Serial.print("Calculated checksum: ");
-        Serial.println(calculatedChecksum);
+        // // Debug prints for received packet and calculated checksum
+        // Serial.print("Received packet: ");
+        // Serial.print(packet.red);
+        // Serial.print(", ");
+        // Serial.print(packet.green);
+        // Serial.print(", ");
+        // Serial.print(packet.blue);
+        // Serial.print(", LED: ");
+        // Serial.print(packet.ledon);
+        // Serial.print(", Rainbow: ");
+        // Serial.println(packet.rainbow);
+        // Serial.print("Received checksum: ");
+        // Serial.println(packet.checksum);
+        // Serial.print("Calculated checksum: ");
+        // Serial.println(calculatedChecksum);
 
         // Validate integrity
         if (packet.checksum == calculatedChecksum) {
@@ -307,6 +310,7 @@ bool check_rx() {
         receiving = false;
         bufferIndex = 0;
         Serial.println("ERROR: Buffer overflow, resetting receiving state.");
+        return;
       }
     }
   }
@@ -341,7 +345,7 @@ void check_button() {
     GREEN = color.g;
     BLUE = color.b;
 
-    Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+    // Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
     delay(200);  // delay to prevent multiple pops
   }
 }
@@ -387,17 +391,12 @@ bool validate_IR(IRrecv IrReceiver) {
       IrReceiver.printIRResultShort(&Serial);
       IrReceiver.printIRSendUsage(&Serial);
       
-      // process IR signal
-      if (IR_lock) {
-        irlock();
-      } else {
-        if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
-          Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-          flashError(1);
-          return false;
-        }
-        return true;
+      if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
+        Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+        flashError(1);
+        return false;
       }
+      return true;
     }
     Serial.println();
 
@@ -447,26 +446,26 @@ void eeprom_save(int red, int green, int blue) {
  * @param red, green, blue the RGB colors to be pushed to the queue
  * @return N/A
  */
-void push_queue(int red, int green, int blue) {
+void pushback(cppQueue& q, int red, int green, int blue) {
   // save CRGB value to stack
   CRGB color = CRGB(red, green, blue);
 
-  CRGBQueue.push(&color);
-  // print stack size
-  Serial.println("Queue size: " + String(CRGBQueue.getCount()));
-  // print stack values
-  for (int i = 0; i < CRGBQueue.getCount(); i++) {
-    CRGB color;
-    CRGBQueue.peekIdx(&color, i);
-    Serial.println("Queue value: " + String(color.r) + ", " + String(color.g) + ", " + String(color.b));
-  }
+  q.push(&color);
+  // // DEBUG print stack size
+  // Serial.println("Queue size: " + String(q.getCount()));
+  // // print stack values
+  // for (int i = 0; i < q.getCount(); i++) {
+  //   CRGB color;
+  //   q.peekIdx(&color, i);
+  //   Serial.println("Queue value: " + String(color.r) + ", " + String(color.g) + ", " + String(color.b));
+  // }
 
   // show contents of queue
   for (int i = 0; i < 3; i ++) {
     // queue size LEDs should flash the color based on the queue
-    for (int j = 0; j < CRGBQueue.getCount(); j++) {
+    for (int j = 0; j < q.getCount(); j++) {
       CRGB color;
-      CRGBQueue.peekIdx(&color, j);
+      q.peekIdx(&color, j);
       led[j] = color;
     }
     FastLED.show();
@@ -479,50 +478,6 @@ void push_queue(int red, int green, int blue) {
 }
 
 /**
- * @brief Locks IR signal to prevent modifications to current state
- * 
- * This functoin will prevent additional IR inputs from being received until
- * unlocked using IR hex code 0xF.
- * 
- * @return N/A
- */
-void irlock() {
-  unsigned long previousMillis = 0;
-  const long interval = 200; // interval for LED indicator
-  bool ledState = false;
-
-  while (IR_lock) {
-    unsigned long currentMillis = millis();
-
-    // built-in LED will indicate lock state
-    if (currentMillis - previousMillis >= interval) {
-      previousMillis = currentMillis;
-      ledState = !ledState;
-      digitalWrite(LED_BUILTIN, ledState ? HIGH : LOW);
-    }
-
-    // check IR signal for unlock
-    /// TODO: Maybe have 0x40 (PWR) input again to modify, then lock to prevent accidentally doing more than intended
-    // if (IrReceiver.decode()) {
-    //   if (IrReceiver.decodedIRData.command == 0xF) {
-    //     IR_lock = false; // Unlock IR signal
-    //     Serial.println("IR unlocked");
-    //   }
-    //   IrReceiver.resume(); // Prepare to receive the next IR signal
-    // }
-
-    check_rx();
-    validate_IR(IrReceiver);
-
-    // Check the piezo sensor
-    piezo_trigger();
-  }
-
-  // Ensure the built-in LED is turned off when unlocked
-  digitalWrite(LED_BUILTIN, LOW);
-}
-
-/**
  * @brief Checks for analog input from the piezoelectric sensor and flashes LED strip
  * 
  * This function will be called on loop checking for input from the piezoelectric sensor.
@@ -532,11 +487,23 @@ void irlock() {
  */
 void piezo_trigger() {
   if (analogRead(PIEZO_PIN) > PIEZO_THRESH) { // Piezo reads analog
+      // multicolor effect
+      if (multicolor) {
+        CRGB color;
+        // rotate between selected colors
+        multicolorQueue.pop(&color);
+        RED = color.r;
+        GREEN = color.g;
+        BLUE = color.b;
+        multicolorQueue.push(&color);
+      }
+
       // Flash LED
       onARGB();
       delay(DELAY_THRESHOLD);
       offARGB();
-    }
+      
+  }
 }
 
 /**
@@ -688,10 +655,8 @@ int processHexCode(int IRvalue) {
         Serial.println("Modifier ON");
         return;
       } else {
-        modifier = false;
-        led[0] = CRGB(0, 0, 0);
-        FastLED.show();
-        Serial.println("Modifier OFF");
+        IrReceiver.disableIRIn();
+        Serial.println("IR disabled");
       }
       break;
 
@@ -846,38 +811,34 @@ int processHexCode(int IRvalue) {
     // DIY2
     case 0xD:
     {
-      while (true) {
-        // continue checking for valid IR signal
-        if (IrReceiver.decode()) {
-          if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
-            break;
-          }
-          IrReceiver.resume();    // resume IR input
-        }
-        ripple2();
-      }
+      // while (true) {
+      //   // continue checking for valid IR signal
+      //   if (IrReceiver.decode()) {
+      //     if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
+      //       break;
+      //     }
+      //     IrReceiver.resume();    // resume IR input
+      //   }
+      //   ripple2();
+      // }
+
+      // custom multicolor
+      pushback(multicolorQueue, RED, GREEN, BLUE);
       break;
     }
     //DIY3
     case 0xE:
       // add to color queue
-      push_queue(RED, GREEN, BLUE);
+      pushback(CRGBQueue, RED, GREEN, BLUE);
       // // check current color queue
       // check_colorQueue();
       break;
     // AUTO(save) | IR lock
     case 0xF:
     {
-      if (!modifier) {
-        eeprom_save(RED, GREEN, BLUE);    // save current color
-        EEPROM.write(RAINBOW_ADDR, rainbow);
-        flashConfirm();                   // flash to confirm save
-      } else {
-        modifier = false;
-        // lock IR signal
-        IR_lock = true;
-        Serial.println("IR locked");
-      }
+      eeprom_save(RED, GREEN, BLUE);    // save current color
+      EEPROM.write(RAINBOW_ADDR, rainbow);
+      flashConfirm();                   // flash to confirm save
       break;
     }
     // ==================== row 10 | DIY 4-6, FLASH ====================================
@@ -888,11 +849,15 @@ int processHexCode(int IRvalue) {
       break;
     // DIY5
     case 0x9:
+      multicolor = !multicolor;
+      if (multicolor) {
+        check_colorQueue(multicolorQueue);
+      }
       break;
     // DIY6
     case 0xA:
       // check current color queue
-      check_colorQueue();
+      check_colorQueue(CRGBQueue);
       break;
     // FLASH
     case 0xB:
@@ -967,9 +932,9 @@ void adj_color(uint8_t& color, int scale) {
   // Set the adjusted color value
   color = newColor;
 
-  // Debug
-  Serial.println("Adjusted color: " + String(color));
-  Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+  // // Debug
+  // Serial.println("Adjusted color: " + String(color));
+  // Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
 }
 
 /**
@@ -1105,11 +1070,13 @@ void rainbow_effect() {
       FastLED.show();
       delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
       
-      check_rx();
-      if (!rainbowrx) {
-        // reset
-        offARGB();
-        return;
+      // check for RF signal
+      if (check_rx()) {
+        if (!ledonrx) {
+          // reset
+          offARGB();
+          return;
+        }
       }
     }
   }
@@ -1122,11 +1089,11 @@ void rainbow_effect() {
  * 
  * @return N/A
  */
-void check_colorQueue() {
+void check_colorQueue(cppQueue& q) {
   // queue size LEDs should flash the color based on the queue
-  for (int j = 0; j < CRGBQueue.getCount(); j++) {
+  for (int j = 0; j < q.getCount(); j++) {
     CRGB color;
-    CRGBQueue.peekIdx(&color, j);
+    q.peekIdx(&color, j);
     led[j] = color;
   }
   FastLED.show();
