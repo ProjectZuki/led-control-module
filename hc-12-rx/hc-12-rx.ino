@@ -154,6 +154,8 @@ const uint32_t known_hex_codes[] = {
   0x4, 0x5, 0x6, 0x7
 };
 
+
+
 void setup() {
   // built-in LED
   pinMode(LED_BUILTIN, OUTPUT);
@@ -272,21 +274,21 @@ bool check_rx() {
         // Calculate the checksum of the received packet
         uint8_t calculatedChecksum = calculateChecksum(packet);
 
-        // Debug prints for received packet and calculated checksum
-        Serial.print("Received packet: ");
-        Serial.print(packet.red);
-        Serial.print(", ");
-        Serial.print(packet.green);
-        Serial.print(", ");
-        Serial.print(packet.blue);
-        Serial.print(", LED: ");
-        Serial.print(packet.ledon);
-        Serial.print(", Rainbow: ");
-        Serial.println(packet.rainbow);
-        Serial.print("Received checksum: ");
-        Serial.println(packet.checksum);
-        Serial.print("Calculated checksum: ");
-        Serial.println(calculatedChecksum);
+        // // Debug prints for received packet and calculated checksum
+        // Serial.print("Received packet: ");
+        // Serial.print(packet.red);
+        // Serial.print(", ");
+        // Serial.print(packet.green);
+        // Serial.print(", ");
+        // Serial.print(packet.blue);
+        // Serial.print(", LED: ");
+        // Serial.print(packet.ledon);
+        // Serial.print(", Rainbow: ");
+        // Serial.println(packet.rainbow);
+        // Serial.print("Received checksum: ");
+        // Serial.println(packet.checksum);
+        // Serial.print("Calculated checksum: ");
+        // Serial.println(calculatedChecksum);
 
         // Validate integrity
         if (packet.checksum == calculatedChecksum) {
@@ -490,6 +492,7 @@ void piezo_trigger() {
       // multicolor effect
       if (multicolor) {
         CRGB color;
+        // rotate between selected colors
         multicolorQueue.pop(&color);
         RED = color.r;
         GREEN = color.g;
