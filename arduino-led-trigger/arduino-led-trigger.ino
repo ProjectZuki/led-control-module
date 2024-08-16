@@ -53,7 +53,7 @@ CRGB led[NUM_LEDS];
 #define RED_ADDR      0
 #define GREEN_ADDR    1
 #define BLUE_ADDR     2
-#define RAINBOW_ADDR  3
+#define JUMP3_ADDR  3
 
 // HC-12 module
 SoftwareSerial HC12(2, 3);  // HC-12 TX Pin, HC-12 RX Pin
@@ -85,9 +85,11 @@ bool modifier = false;
 // multi effect
 bool multicolor = false;
 
-// always on
+// modifiers
 bool ledonrx = false;
-bool rainbowrx = false;
+bool rainboweffectrx = false;
+bool jump3 = false;
+bool jump7 = false;
 
 // delay threshold for flash duration
 int DELAY_THRESHOLD = 100;
@@ -105,7 +107,7 @@ struct Trail {
 Trail trails[TRAIL_MAX];
 
 // Color array for rainbow effect
-bool rainbow = false;
+// bool rainbow = false;
 int color_index = 0;
 CRGB RainbowColors[] = {
   CRGB::Red,
@@ -117,12 +119,24 @@ CRGB RainbowColors[] = {
   CRGB::Violet
 };
 
+CRGB RainbowColors2[] = {
+  CRGB::Pink,
+  CRGB::Cyan,
+  CRGB::Magenta,
+  CRGB::Purple,
+  CRGB::Teal,
+  CRGB::Lime,
+  CRGB::Aqua
+};
+
 struct dataPacket {
   uint8_t red;
   uint8_t green;
   uint8_t blue;
   bool ledon;
-  bool rainbow;
+  bool rainboweffect;
+  bool jump3;
+  bool jump7;
   uint8_t checksum;
 };
 
@@ -177,6 +191,11 @@ void setup() {
     RainbowColors[i].g = scale8(RainbowColors[i].g, MAX_INTENSITY);
     RainbowColors[i].b = scale8(RainbowColors[i].b, MAX_INTENSITY);
   }
+  for (int i = 0; i < sizeof(RainbowColors2) / sizeof(RainbowColors2[0]); i++) {
+    RainbowColors2[i].r = scale8(RainbowColors2[i].r, MAX_INTENSITY);
+    RainbowColors2[i].g = scale8(RainbowColors2[i].g, MAX_INTENSITY);
+    RainbowColors2[i].b = scale8(RainbowColors2[i].b, MAX_INTENSITY);
+  }
 
   // piezo
   pinMode(PIEZO_PIN, INPUT);
@@ -218,9 +237,9 @@ void loop() {
   }
 
   if (ledonrx) {
-    rainbowrx = false;
+    rainboweffectrx = false;
     toggleOnOff();
-  } else if (rainbowrx) {
+  } else if (rainboweffectrx) {
     ledonrx = false;
     rainbow_effect();
   }
@@ -272,21 +291,25 @@ bool check_rx() {
         // Calculate the checksum of the received packet
         uint8_t calculatedChecksum = calculateChecksum(packet);
 
-        // // Debug prints for received packet and calculated checksum
-        // Serial.print("Received packet: ");
-        // Serial.print(packet.red);
-        // Serial.print(", ");
-        // Serial.print(packet.green);
-        // Serial.print(", ");
-        // Serial.print(packet.blue);
-        // Serial.print(", LED: ");
-        // Serial.print(packet.ledon);
-        // Serial.print(", Rainbow: ");
-        // Serial.println(packet.rainbow);
-        // Serial.print("Received checksum: ");
-        // Serial.println(packet.checksum);
-        // Serial.print("Calculated checksum: ");
-        // Serial.println(calculatedChecksum);
+        // Debug prints for received packet and calculated checksum
+        Serial.print("Received packet: ");
+        Serial.print(packet.red);
+        Serial.print(", ");
+        Serial.print(packet.green);
+        Serial.print(", ");
+        Serial.println(packet.blue);
+        Serial.print(", LED: ");
+        Serial.println(packet.ledon);
+        Serial.print(", Rainbow: ");
+        Serial.println(packet.rainboweffect);
+        Serial.print("Jump3: ");
+        Serial.println(packet.jump3);
+        Serial.print("Jump7: ");
+        Serial.println(packet.jump7);
+        Serial.print("Received checksum: ");
+        Serial.println(packet.checksum);
+        Serial.print("Calculated checksum: ");
+        Serial.println(calculatedChecksum);
 
         // Validate integrity
         if (packet.checksum == calculatedChecksum) {
@@ -295,7 +318,9 @@ bool check_rx() {
           GREEN = packet.green;
           BLUE = packet.blue;
           ledonrx = packet.ledon;
-          rainbowrx = packet.rainbow;
+          rainboweffectrx = packet.rainboweffect;
+          jump3 = packet.jump3;
+          jump7 = packet.jump7;
           return true;
         } else {
           Serial.println("ERROR: checksum mismatch, possible data corruption");
@@ -315,18 +340,6 @@ bool check_rx() {
     }
   }
   return false;
-}
-
-/**
- * @brief Calculates the checksum for the data packet
- * 
- * This function will calculate the checksum for the data packet.
- * 
- * @param packet the data packet to calculate the checksum
- * @return the checksum value
- */
-uint8_t calculateChecksum(dataPacket& packet) {
-  return packet.red + packet.green + packet.blue + packet.ledon + packet.rainbow;
 }
 
 /**
@@ -420,7 +433,7 @@ void eeprom_read() {
   RED = EEPROM.read(RED_ADDR);
   GREEN = EEPROM.read(GREEN_ADDR);
   BLUE = EEPROM.read(BLUE_ADDR);
-  rainbow = EEPROM.read(RAINBOW_ADDR);
+  jump3 = EEPROM.read(JUMP3_ADDR);
 }
 
 /**
@@ -544,7 +557,7 @@ void offLED() {
  */
 void onARGB() {
   // do the thing but ARGB
-  fill_solid(led, NUM_LEDS, rainbow? RainbowColors[(color_index++) % sizeof(RainbowColors)] : CRGB(RED, GREEN, BLUE));
+  fill_solid(led, NUM_LEDS, jump3? RainbowColors[(color_index++) % sizeof(RainbowColors)] : jump7? RainbowColors2[(color_index++) % sizeof(RainbowColors2)] : CRGB(RED, GREEN, BLUE));
 
   FastLED.show();
 }
@@ -836,8 +849,9 @@ int processHexCode(int IRvalue) {
     // AUTO(save) | IR lock
     case 0xF:
     {
+      /// TODO: Save all values, including jump3/7
       eeprom_save(RED, GREEN, BLUE);    // save current color
-      EEPROM.write(RAINBOW_ADDR, rainbow);
+      EEPROM.write(JUMP3_ADDR, jump3);
       flashConfirm();                   // flash to confirm save
       break;
     }
@@ -869,11 +883,12 @@ int processHexCode(int IRvalue) {
     // JUMP3
     case 0x4:
       // Rainbow color effect
-      rainbow = true;
+      jump3 = true;
       return;   // return early to prevent color change
     // JUMP7
     case 0x5:
       // other rainbow effect
+      jump7 = true;
       break;
     // FADE3
     case 0x6:
@@ -889,7 +904,8 @@ int processHexCode(int IRvalue) {
       return -1;
   }
 
-  rainbow = false;
+  jump3 = false;
+  jump7 = false;
   modifier = false;
   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
   FastLED.show();
@@ -955,8 +971,8 @@ void ripple() {
       if (!trails[i].active) {
         trails[i].position = 0;  // Initialize new trail position at the beginning
         trails[i].active = true;
-        trails[i].color = rainbow ? RainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
-        if (rainbow) {
+        trails[i].color = jump3 ? RainbowColors[color_index] : jump7? RainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
+        if (jump3) {
           color_index = (color_index + 1) % (sizeof(RainbowColors) / sizeof(RainbowColors[0]));
         }
         break;
@@ -1015,8 +1031,8 @@ void ripple2() {
     if (!trails[i].active) {
       trails[i].position = 0;  // Initialize new trail position at the beginning
       trails[i].active = true;
-      trails[i].color = rainbow ? RainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
-      if (rainbow) {
+      trails[i].color = jump3 ? RainbowColors[color_index] : jump7? RainbowColors2[color_index] : CRGB(RED, GREEN, BLUE);
+      if (jump3) {
         color_index = (color_index + 1) % (sizeof(RainbowColors) / sizeof(RainbowColors[0]));
       }
       break;
@@ -1072,7 +1088,8 @@ void rainbow_effect() {
       
       // check for RF signal
       if (check_rx()) {
-        if (!ledonrx) {
+        if (!rainboweffectrx) {
+          Serial.println("Rainbow effect off");
           // reset
           offARGB();
           return;

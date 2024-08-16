@@ -76,6 +76,8 @@ struct dataPacket {
   uint8_t blue;
   bool ledon;
   bool rainboweffect;
+  bool jump3;
+  bool jump7;
   uint8_t checksum;
 };
 
@@ -168,14 +170,16 @@ bool validate_IR(IRrecv IrReceiver) {
 void transmit_data() {
   packet.checksum = calculateChecksum(packet);
 
-  // // Debug print for packet
-  // Serial.print("Transmitting data... ");
-  // Serial.print("Red: "); Serial.print(packet.red);
-  // Serial.print(", Green: "); Serial.print(packet.green);
-  // Serial.print(", Blue: "); Serial.print(packet.blue);
-  // Serial.print(", LED: "); Serial.print(packet.ledon);
-  // Serial.print(", Rainbow: "); Serial.print(packet.rainboweffect);
-  // Serial.print(", Checksum: "); Serial.println(packet.checksum);
+  // Debug print for packet
+  Serial.print("Transmitting data... ");
+  Serial.print("Red: "); Serial.print(packet.red);
+  Serial.print(", Green: "); Serial.print(packet.green);
+  Serial.print(", Blue: "); Serial.println(packet.blue);
+  Serial.print(", LED: "); Serial.println(packet.ledon);
+  Serial.print(", RainbowEffect: "); Serial.println(packet.rainboweffect);
+  Serial.print(", Jump3: "); Serial.println(packet.jump3);
+  Serial.print(", Jump7: "); Serial.println(packet.jump7);
+  Serial.print(", Checksum: "); Serial.println(packet.checksum);
 
   // // Debug print for raw bytes
   // byte* ptr = (byte*)&packet;
@@ -187,7 +191,7 @@ void transmit_data() {
   // Serial.println();
 
   // Transmit data with start and end markers
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 3; i++) {
     HC12.write(START_MARKER);
     HC12.write((byte*)&packet, sizeof(packet));
     HC12.write(END_MARKER);
@@ -197,11 +201,12 @@ void transmit_data() {
 
 uint8_t calculateChecksum(const dataPacket& packet) {
   uint8_t checksum = 0;
-  checksum += packet.red;
-  checksum += packet.green;
-  checksum += packet.blue;
-  checksum += packet.ledon;
-  checksum += packet.rainboweffect;
+  const uint8_t* ptr = (const uint8_t*)&packet;
+
+  // Calculate checksum for the packet excluding the checksum field itself
+  for (size_t i = 0; i < sizeof(packet) - sizeof(packet.checksum); ++i) {
+    checksum += ptr[i];
+  }
   return checksum;
 }
 
@@ -232,8 +237,9 @@ int processHexCode(int IRvalue) {
     // play/pause
     case 0x41:
       // reverse lit status
-      packet.ledon =  !packet.ledon;
-      break;
+      // packet.ledon =  !packet.ledon;
+      setParam(packet.ledon);
+      return;
     // PWR
     case 0x40:
       break;
@@ -415,7 +421,8 @@ int processHexCode(int IRvalue) {
     case 0x8:
     //   rainbow_effect();
       // break;
-      packet.rainboweffect = !packet.rainboweffect;
+      // packet.rainboweffect = !packet.rainboweffect;
+      setParam(packet.rainboweffect);
       return;
     // DIY5
     case 0x9:
@@ -433,12 +440,13 @@ int processHexCode(int IRvalue) {
     // JUMP3
     case 0x4:
       // Rainbow color effect
-      // packet.rainbow = true;
+      setParam(packet.jump3);
       return;   // return early to prevent color change
     // JUMP7
     case 0x5:
       // other rainbow effect
-      break;
+      setParam(packet.jump7);
+      return;
     // FADE3
     case 0x6:
       break;
@@ -453,11 +461,25 @@ int processHexCode(int IRvalue) {
       return -1;
   }
 
-  // rainbow = false;
-//   modifier = false;
+  // reset modifiers
+  // packet.ledon = false;
+  packet.rainboweffect = false;
+  packet.jump3 = false;
+  packet.jump7 = false;
 //   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
 //   FastLED.show();
   return IRvalue;
+}
+
+void setParam(bool& param) {
+  bool temp = param;
+
+  packet.ledon = false;
+  packet.rainboweffect = false;
+  packet.jump3 = false;
+  packet.jump7 = false;
+
+  param = !temp;
 }
 
 /**
