@@ -40,7 +40,7 @@
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
 #define NUM_LEDS      144
 #define LED_PIN       10
-#define MAX_INTENSITY 32    // 255 / 128 / 64 / 32 / 16 / 8
+#define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
 #define LED_RED       5
@@ -53,7 +53,8 @@ CRGB led[NUM_LEDS];
 #define RED_ADDR      0
 #define GREEN_ADDR    1
 #define BLUE_ADDR     2
-#define JUMP3_ADDR  3
+#define JUMP3_ADDR    3
+#define JUMP7_ADDR    4
 
 // HC-12 module
 SoftwareSerial HC12(2, 3);  // HC-12 TX Pin, HC-12 RX Pin
@@ -72,9 +73,6 @@ cppQueue multicolorQueue(sizeof(CRGB), 5, FIFO);
 // piezo pin
 #define PIEZO_PIN     A0
 unsigned int PIEZO_THRESH = 300;
- 
-// // always on mode
-// bool ledon = false;
 
 // IR
 IRrecv irrecv(IR_RECEIVER_PIN);
@@ -82,14 +80,16 @@ decode_results results;
 
 // modifier tied to PWR button
 bool modifier = false;
-// multi effect
-bool multicolor = false;
 
-// modifiers
-bool ledonrx = false;
-bool rainboweffectrx = false;
-bool jump3 = false;
-bool jump7 = false;
+// custom effect modifiers
+bool ledonrx = false;         // on/flash mode
+bool rainboweffectrx = false; // rainbow effect
+bool jump3 = false;           // rainbow colors
+bool jump7 = false;           // rainbow2 colors
+bool multicolor = false;      // multicolor effect
+bool DIY1 = false;            // ripple effect
+bool fade3 = false;           // fade off
+bool fade7 = false;           // fade on AND off
 
 // delay threshold for flash duration
 int DELAY_THRESHOLD = 100;
@@ -434,6 +434,7 @@ void eeprom_read() {
   GREEN = EEPROM.read(GREEN_ADDR);
   BLUE = EEPROM.read(BLUE_ADDR);
   jump3 = EEPROM.read(JUMP3_ADDR);
+  jump7 = EEPROM.read(JUMP7_ADDR);
 }
 
 /**
@@ -448,7 +449,9 @@ void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
   EEPROM.write(RED_ADDR, red);
   EEPROM.write(GREEN_ADDR, green);
-  EEPROM.write(BLUE_ADDR, blue);  
+  EEPROM.write(BLUE_ADDR, blue);
+  EEPROM.write(JUMP3_ADDR, jump3);
+  EEPROM.write(JUMP7_ADDR, jump7);  
 }
 
 /**
@@ -557,9 +560,22 @@ void offLED() {
  */
 void onARGB() {
   // do the thing but ARGB
-  fill_solid(led, NUM_LEDS, jump3? RainbowColors[(color_index++) % sizeof(RainbowColors)] : jump7? RainbowColors2[(color_index++) % sizeof(RainbowColors2)] : CRGB(RED, GREEN, BLUE));
+  if (fade7) {
+    for (int i = 0; i <= MAX_INTENSITY; i += 5) {
+      fill_solid(led, NUM_LEDS, CRGB(RED, GREEN, BLUE).fadeLightBy(MAX_INTENSITY - i));
+      FastLED.show();
+      delay(1);  // Short delay for quicker fade-in
 
-  FastLED.show();
+      // on trigger reset fade
+      if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {
+        i = MAX_INTENSITY/4;
+      }
+    }
+  } else {
+    fill_solid(led, NUM_LEDS, jump3? RainbowColors[(color_index++) % sizeof(RainbowColors)] : jump7? RainbowColors2[(color_index++) % sizeof(RainbowColors2)] : CRGB(RED, GREEN, BLUE));
+    FastLED.show();
+  }
+
 }
 
 /**
@@ -571,8 +587,21 @@ void onARGB() {
  */
 void offARGB() {
   // do the off thing
-  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-  FastLED.show();
+  if (fade3 || fade7) {
+    for (int i = MAX_INTENSITY; i >= 0; i-=5) {
+      fill_solid(led, NUM_LEDS, CRGB(RED, GREEN, BLUE).fadeToBlackBy(MAX_INTENSITY - i));
+      FastLED.show();
+      delay(1);
+
+      // on trigger reset fade
+      if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {
+        i = MAX_INTENSITY;
+      }
+    }
+  } else {
+    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+    FastLED.show();
+  }
 }
 
 /**
@@ -824,17 +853,6 @@ int processHexCode(int IRvalue) {
     // DIY2
     case 0xD:
     {
-      // while (true) {
-      //   // continue checking for valid IR signal
-      //   if (IrReceiver.decode()) {
-      //     if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
-      //       break;
-      //     }
-      //     IrReceiver.resume();    // resume IR input
-      //   }
-      //   ripple2();
-      // }
-
       // custom multicolor
       pushback(multicolorQueue, RED, GREEN, BLUE);
       break;
@@ -851,7 +869,6 @@ int processHexCode(int IRvalue) {
     {
       /// TODO: Save all values, including jump3/7
       eeprom_save(RED, GREEN, BLUE);    // save current color
-      EEPROM.write(JUMP3_ADDR, jump3);
       flashConfirm();                   // flash to confirm save
       break;
     }
@@ -892,10 +909,12 @@ int processHexCode(int IRvalue) {
       break;
     // FADE3
     case 0x6:
-      break;
+      fade3 = true;
+      return;
     // FADE7
     case 0x7:
-      break;
+      fade7 = true;
+      return;
     
     // Default print error for debug
     default:
@@ -906,6 +925,8 @@ int processHexCode(int IRvalue) {
 
   jump3 = false;
   jump7 = false;
+  // fade3 = false;
+  // fade7 = false;
   modifier = false;
   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
   FastLED.show();
