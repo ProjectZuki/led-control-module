@@ -31,7 +31,7 @@
 #include <FastLED.h>          // NeoPixel ARGB
 #include <EEPROM.h>           // save ROM data durong off state
 #include <cppQueue.h>         // queue for RGB color states
-#include <SoftwareSerial.h>   // HC-12 module
+// #include <SoftwareSerial.h>   // HC-12 module
 
 // IR receiver pin
 #define IR_RECEIVER_PIN 18
@@ -55,11 +55,6 @@ CRGB led[NUM_LEDS];
 #define BLUE_ADDR     2
 #define JUMP3_ADDR    3
 #define JUMP7_ADDR    4
-
-// HC-12 module
-SoftwareSerial HC12(2, 3);  // HC-12 TX Pin, HC-12 RX Pin
-#define START_MARKER 0x7E
-#define END_MARKER 0x7F
 
 uint8_t RED         = 0;
 uint8_t GREEN       = 0;
@@ -129,19 +124,6 @@ CRGB RainbowColors2[] = {
   CRGB::Aqua
 };
 
-struct dataPacket {
-  uint8_t red;
-  uint8_t green;
-  uint8_t blue;
-  bool ledon;
-  bool rainboweffect;
-  bool jump3;
-  bool jump7;
-  uint8_t checksum;
-};
-
-dataPacket packet;
-
 // All known IR hex codes
 const uint32_t known_hex_codes[] = {
   // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
@@ -202,9 +184,6 @@ void setup() {
   // debug
   Serial.begin(9600);
 
-  // HC-12 module communication
-  HC12.begin(9600);
-
   // IR
   // Start the receiver, set default feedback LED
   IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
@@ -223,8 +202,6 @@ void loop() {
   // turn on built in LED to confirm functionality
   // digitalWrite(LED_BUILTIN, HIGH);
 
-  // check_rx();
-
   check_button();
 
   /// NOTE: uncomment for actual implementation
@@ -232,9 +209,7 @@ void loop() {
   // onLED();
 
   // check for either IR or transmitter data
-  if (!validate_IR(IrReceiver)) {
-    check_rx();
-  }
+  validate_IR(IrReceiver);
 
   if (ledonrx) {
     rainboweffectrx = false;
@@ -244,102 +219,8 @@ void loop() {
     rainbow_effect();
   }
 
+  // check for piezo sensor input
   piezo_trigger();
-}
-
-/**
- * @brief Receives transmitter data if available
- * 
- * This function will check transmitter data values red, green, blue when available.
- * 
- * @return N/A
- */
-uint8_t calculateChecksum(const dataPacket& packet) {
-  uint8_t checksum = 0;
-  const uint8_t* ptr = (const uint8_t*)&packet;
-
-  // Calculate checksum for the packet excluding the checksum field itself
-  for (size_t i = 0; i < sizeof(packet) - sizeof(packet.checksum); ++i) {
-    checksum += ptr[i];
-  }
-  return checksum;
-}
-
-/**
- * @brief Receives transmitter data when available
- * 
- * This function will check transmitter data values red, green, blue, ledon, and rainboweffect when available.
- * 
- * @return N/A
- */
-bool check_rx() {
-  static bool receiving = false;
-  static byte buffer[sizeof(dataPacket)];
-  static uint8_t bufferIndex = 0;
-
-  while (HC12.available() > 0) {
-    byte receivedByte = HC12.read();
-    
-    if (receivedByte == START_MARKER) {
-      receiving = true;
-      bufferIndex = 0;
-    } else if (receivedByte == END_MARKER) {
-      if (receiving && bufferIndex == sizeof(dataPacket)) {
-        dataPacket packet;
-        memcpy(&packet, buffer, sizeof(dataPacket));
-
-        // Calculate the checksum of the received packet
-        uint8_t calculatedChecksum = calculateChecksum(packet);
-
-        // Debug prints for received packet and calculated checksum
-        Serial.print("Received packet: ");
-        Serial.print(packet.red);
-        Serial.print(", ");
-        Serial.print(packet.green);
-        Serial.print(", ");
-        Serial.println(packet.blue);
-        Serial.print(", LED: ");
-        Serial.println(packet.ledon);
-        Serial.print(", Rainbow: ");
-        Serial.println(packet.rainboweffect);
-        Serial.print("Jump3: ");
-        Serial.println(packet.jump3);
-        Serial.print("Jump7: ");
-        Serial.println(packet.jump7);
-        Serial.print("Received checksum: ");
-        Serial.println(packet.checksum);
-        Serial.print("Calculated checksum: ");
-        Serial.println(calculatedChecksum);
-
-        // Validate integrity
-        if (packet.checksum == calculatedChecksum) {
-          // Update your variables here
-          RED = packet.red;
-          GREEN = packet.green;
-          BLUE = packet.blue;
-          ledonrx = packet.ledon;
-          rainboweffectrx = packet.rainboweffect;
-          jump3 = packet.jump3;
-          jump7 = packet.jump7;
-          return true;
-        } else {
-          Serial.println("ERROR: checksum mismatch, possible data corruption");
-        }
-      }
-      receiving = false; // Reset receiving state after end marker
-    } else if (receiving) {
-      if (bufferIndex < sizeof(dataPacket)) {
-        buffer[bufferIndex++] = receivedByte;
-      } else {
-        // Buffer overflow, reset receiving
-        receiving = false;
-        bufferIndex = 0;
-        Serial.println("ERROR: Buffer overflow, resetting receiving state.");
-        return;
-      }
-    }
-  }
-  return false;
 }
 
 /**
@@ -406,7 +287,7 @@ bool validate_IR(IRrecv IrReceiver) {
       
       if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
         Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-        flashError(1);
+        // flashError(1);
         return false;
       }
       return true;
@@ -644,17 +525,6 @@ void toggleOnOff() {
       onLED();
       delay(200);  // delay to reduce multiple inputs
       IrReceiver.resume();
-    } else if (check_rx()) {
-      ledon = ledonrx;
-      if (!ledon) {
-        // reset
-        offARGB();
-        offLED();
-      } else {
-        // apply modifications to color
-        onARGB();
-        onLED();
-      }
     }
   }
 }
@@ -845,8 +715,6 @@ int processHexCode(int IRvalue) {
             break;
           }
           IrReceiver.resume();    // resume IR input
-        } else if (check_rx()) {
-          break;
         }
         ripple();
       }
@@ -921,7 +789,7 @@ int processHexCode(int IRvalue) {
     // Default print error for debug
     default:
       Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
-      flashError(2);
+      // flashError(2);
       return -1;
   }
 
@@ -1039,59 +907,6 @@ void ripple() {
 }
 
 /**
- * @brief Creates a ripple effect without requiring impact
- * 
- * This function will create a ripple effect on the ARGB LED strip without requiring
- *  input from the piezo sensor.
- * 
- * @return N/A
- */
-void ripple2() {
-  // Same ripple trail without the need of piezo trigger
-
-  // Add a new trail if there is room
-  for (int i = 0; i < TRAIL_MAX; i++) {
-    if (!trails[i].active) {
-      trails[i].position = 0;  // Initialize new trail position at the beginning
-      trails[i].active = true;
-      trails[i].color = jump3 ? RainbowColors[color_index] : jump7? RainbowColors2[color_index] : CRGB(RED, GREEN, BLUE);
-      if (jump3) {
-        color_index = (color_index + 1) % (sizeof(RainbowColors) / sizeof(RainbowColors[0]));
-      }
-      break;
-    }
-  }
-
-  // Clear the LED array for each frame
-  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-  
-  // Update and display the trails
-  for (int t = 0; t < TRAIL_MAX; t++) {
-    if (trails[t].active) {
-      // Draw the current trail with a gap
-      for (int j = 0; j < TRAIL_LENGTH; j++) {
-        int pos = trails[t].position - j;
-        if (pos >= 0 && pos < NUM_LEDS) {
-          led[pos] = trails[t].color;
-        }
-      }
-      
-      // Update the position for the next frame
-      trails[t].position++;
-
-      // Deactivate the trail if it has moved past the LED strip
-      if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH + 1) { // Add 1 for the gap
-        trails[t].active = false;
-        trails[t].position = -1; // Reset position
-      }
-    }
-  }
-
-  FastLED.show();
-  delay(1); // Adjust the delay for the speed of the ripple
-}
-
-/**
  * @brief Creates a rainbow effect
  * 
  * This function will create a rainbow effect on the ARGB LED strip.
@@ -1101,23 +916,13 @@ void ripple2() {
  * @return N/A
  */
 void rainbow_effect() {
-  while (true) {
+  while (IrReceiver.decode() && processHexCode(IrReceiver.decodedIRData.command) != -1) {
     for (int j = 0; j < 255; j++) {
       for (int i = 0; i < NUM_LEDS; i++) {
         led[i] = CHSV(i - (j * 2), 255, 255); /* The higher the value 4 the less fade there is and vice versa */ 
       }
       FastLED.show();
       delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
-      
-      // check for RF signal
-      if (check_rx()) {
-        if (!rainboweffectrx) {
-          Serial.println("Rainbow effect off");
-          // reset
-          offARGB();
-          return;
-        }
-      }
     }
   }
 }
@@ -1168,26 +973,26 @@ void flashConfirm() {
   }
 }
 
-/**
- * @brief Flashes the LED strip to indicate an error
- * 
- * This function will flash the LED strip to indicate an error based on the error code.
- * 
- * @param errorcode the error code to flash the LED strip (number of flashes)
- * @return N/A
- */
-void flashError(int errorcode) {
-  /*
-  * Flash error codes based on specific error.
-  * 1: Invalid IR remote value recieved
-  * 2: Unknown protocol from IR
-  */
-  /// TODO: Modify. Will react with any IR signals (e.g. iPhone Face ID and any other source of IR)
-  for (int i = 0; i < errorcode; i++) {
-    led[0] = CRGB(MAX_INTENSITY, 0, 0);
-    FastLED.show();
-    delay(50);
-    led[0] = CRGB(0, 0, 0);
-    FastLED.show();
-  }
-}
+// /**
+//  * @brief Flashes the LED strip to indicate an error
+//  * 
+//  * This function will flash the LED strip to indicate an error based on the error code.
+//  * 
+//  * @param errorcode the error code to flash the LED strip (number of flashes)
+//  * @return N/A
+//  */
+// void flashError(int errorcode) {
+//   /*
+//   * Flash error codes based on specific error.
+//   * 1: Invalid IR remote value recieved
+//   * 2: Unknown protocol from IR
+//   */
+//   /// TODO: Modify. Will react with any IR signals (e.g. iPhone Face ID and any other source of IR)
+//   for (int i = 0; i < errorcode; i++) {
+//     led[0] = CRGB(MAX_INTENSITY, 0, 0);
+//     FastLED.show();
+//     delay(50);
+//     led[0] = CRGB(0, 0, 0);
+//     FastLED.show();
+//   }
+// }
