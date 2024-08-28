@@ -1,10 +1,10 @@
 
 /******************************************************************************
- * @file       hc-12-tx.ino
+ * @file       led-trigger-transmitter.ino
  * @brief      Arduino RF communication using HC-12 module as sender
  *
  * @author     Willie Alcaraz ([Project]Zuki)
- * @date       July 2024
+ * @date       August 2024
  *
  * @copyright  
  * © 2024 [Project]Zuki. All rights reserved.

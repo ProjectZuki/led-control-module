@@ -1,13 +1,13 @@
 
 /******************************************************************************
- * @file       arduino-led-trigger.ino
+ * @file       led-trigger.ino
  * @brief      This source code file programs an Arduino Nano Every based on the
  *             ATMega4809 AVR processor to flash an ARGB LED strip on impact of
  *             a piezoelectric sensor. The device will be programmed to modify
  *             LED colors based on an RGB IR remote.
  *
  * @author     Willie Alcaraz ([Project]Zuki)
- * @date       July 2024
+ * @date       August 2024
  *
  * @copyright  
  * © 2024 [Project]Zuki. All rights reserved.
@@ -38,7 +38,7 @@
 
 // ARGB pin
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
-#define NUM_LEDS      10
+#define NUM_LEDS      144
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
