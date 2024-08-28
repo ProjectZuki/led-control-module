@@ -38,7 +38,7 @@
 
 // ARGB pin
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
-#define NUM_LEDS      144
+#define NUM_LEDS      10
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
@@ -718,7 +718,7 @@ int processHexCode(int IRvalue) {
 
     // ==================== row 3 | Color ==========================================
     case 0x54:
-      setColor(CRGB::Orange);
+      setColor(0xFF3F00);
       break;
     case 0x55:
       setColor(CRGB::LawnGreen);
@@ -728,46 +728,46 @@ int processHexCode(int IRvalue) {
       break;
 
     case 0x48:
-      setColor(CRGB::DeepPink);
+      setColor(0xFF999A); 
       break;
 
     // ==================== row 4 | Color ==========================================
     case 0x50:
-      setColor(CRGB::Gold);
+      setColor(0xCC3E00);
       break;
     case 0x51:
       setColor(CRGB::Cyan);
       break;
     case 0x4D:
-      setColor(CRGB::DarkViolet);
+      setColor(0xFF003A);
       break;
     case 0x4C:
-      setColor(CRGB::Coral);
+      setColor(0xFF4C83);
       break;
 
     // ==================== row 5 | Color ==========================================
     case 0x1C:
-      setColor(CRGB::DarkGoldenrod);
+      setColor(0x998600);
       break;
     case 0x1D:
-      setColor(CRGB::DarkCyan);
+      setColor(0x99FF33);
       break;
     case 0x1E:
-      setColor(CRGB::Magenta);
+      setColor(0xFF0066);
       break;
     case 0x1F:
-      setColor(CRGB::PowderBlue);
+      setColor(0xB09966);
       break;
 
     // ==================== row 6 | Color ==========================================
     case 0x18:
-      setColor(CRGB::Yellow);
+      setColor(0xFFC466);
       break;
     case 0x19:
-      setColor(CRGB::DarkTurquoise);
+      setColor(0x66FF33);
       break;
     case 0x1A:
-      setColor(CRGB::DeepPink);
+      setColor(0x991493);
       break;
     case 0x1B:
       setColor(CRGB::LightSteelBlue);
@@ -845,6 +845,8 @@ int processHexCode(int IRvalue) {
             break;
           }
           IrReceiver.resume();    // resume IR input
+        } else if (check_rx()) {
+          break;
         }
         ripple();
       }
@@ -969,9 +971,9 @@ void adj_color(uint8_t& color, int scale) {
   // Set the adjusted color value
   color = newColor;
 
-  // // Debug
-  // Serial.println("Adjusted color: " + String(color));
-  // Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+  // Debug
+  Serial.println("Adjusted color: " + String(color));
+  Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
 }
 
 /**
