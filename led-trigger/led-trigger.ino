@@ -40,7 +40,7 @@
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
 #define NUM_LEDS      144
 #define LED_PIN       10
-#define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
+#define MAX_INTENSITY 210    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
 #define LED_RED       5
@@ -89,9 +89,18 @@ bool fade7 = false;           // fade on AND off
 // delay threshold for flash duration
 int DELAY_THRESHOLD = 100;
 
+// debounce
+int lastButtonState = LOW;                  // prev button state
+int buttonState;                            // current button state
+unsigned long buttonPressTime = 0;   // prev debounce time
+unsigned long buttonDebounceDelay = 1000;     // debounce delay for button
+
+unsigned long lastIRDebounceTime = 0;       // prev debounce time
+unsigned long IRDebounceDelay = 100;        // debounce delay for IR
+
 // For trail ripple effect
 const int TRAIL_LENGTH = 25;
-const int TRAIL_MAX = 10;  // Maximum number of simultaneous trails
+const int TRAIL_MAX = 10;       // Maximum number of simultaneous trails
 
 struct Trail {
   int position;
@@ -102,8 +111,8 @@ struct Trail {
 Trail trails[TRAIL_MAX];
 
 // Color array for rainbow effect
-// bool rainbow = false;
 int color_index = 0;
+
 CRGB RainbowColors[] = {
   CRGB::Red,
   CRGB::Orange,
@@ -155,7 +164,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
 
   // button
-  pinMode(BUTTON_PIN, INPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // ARGB
   FastLED.addLeds<NEOPIXEL, LED_PIN>(led, NUM_LEDS);
@@ -232,15 +241,32 @@ void loop() {
  * @return N/A
  */
 void check_button() {
-  if (digitalRead(BUTTON_PIN) == HIGH) {
-    CRGB color;
-    CRGBQueue.pop(&color);
-    RED = color.r;
-    GREEN = color.g;
-    BLUE = color.b;
+  // check button for input
+  int currentButtonState = digitalRead(BUTTON_PIN);
 
-    // Serial.println("Color from queue: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
-    delay(200);  // delay to prevent multiple pops
+  // check button state change
+  if(currentButtonState != lastButtonState) {
+    lastButtonState = currentButtonState;
+
+    lastButtonState = currentButtonState;
+
+    // check for press
+    if (currentButtonState == LOW) {
+      if ((millis() - buttonPressTime) >= buttonDebounceDelay) {
+        // reset cooldown
+        buttonPressTime = millis();
+        
+        // check for color queue
+        if (!CRGBQueue.isEmpty()) {
+          CRGB color;
+          CRGBQueue.pop(&color);
+          RED = color.r;
+          GREEN = color.g;
+          BLUE = color.b;
+        }
+      }
+
+    }
   }
 }
 
@@ -916,7 +942,7 @@ void ripple() {
  * @return N/A
  */
 void rainbow_effect() {
-  while (IrReceiver.decode() && processHexCode(IrReceiver.decodedIRData.command) != -1) {
+  while (true) {
     for (int j = 0; j < 255; j++) {
       for (int i = 0; i < NUM_LEDS; i++) {
         led[i] = CHSV(i - (j * 2), 255, 255); /* The higher the value 4 the less fade there is and vice versa */ 
