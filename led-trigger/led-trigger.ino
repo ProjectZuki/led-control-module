@@ -95,8 +95,8 @@ int buttonState;                            // current button state
 unsigned long buttonPressTime = 0;   // prev debounce time
 unsigned long buttonDebounceDelay = 1000;     // debounce delay for button
 
-unsigned long lastIRDebounceTime = 0;       // prev debounce time
-unsigned long IRDebounceDelay = 100;        // debounce delay for IR
+unsigned long lastIRTime = 0;       // prev debounce time
+unsigned long IRDebounceDelay = 500;        // debounce delay for IR
 
 // For trail ripple effect
 const int TRAIL_LENGTH = 25;
@@ -255,7 +255,7 @@ void check_button() {
       if ((millis() - buttonPressTime) >= buttonDebounceDelay) {
         // reset cooldown
         buttonPressTime = millis();
-        
+
         // check for color queue
         if (!CRGBQueue.isEmpty()) {
           CRGB color;
@@ -300,31 +300,38 @@ bool check_hex_code(uint32_t hex_code) {
 bool validate_IR(IRrecv IrReceiver) {
   // IR remote instructions
   if (IrReceiver.decode()) {
-    if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-      Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
-      // We have an unknown protocol here, print extended info
-      IrReceiver.printIRResultRawFormatted(&Serial, true);
-      IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
-      return false;
-    } else {
-      IrReceiver.resume(); // Early enable receiving of the next IR frame
-      IrReceiver.printIRResultShort(&Serial);
-      IrReceiver.printIRSendUsage(&Serial);
-      
-      if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
-        Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-        // flashError(1);
+    unsigned long currentMillis = millis();
+
+    if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
+
+      if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
+        // Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+        // We have an unknown protocol here, print extended info
+        // IrReceiver.printIRResultRawFormatted(&Serial, true);
+        IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
         return false;
+      } else {
+        IrReceiver.resume(); // Early enable receiving of the next IR frame
+        // IrReceiver.printIRResultShort(&Serial);
+        // IrReceiver.printIRSendUsage(&Serial);
+        
+        if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
+          Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
+          // flashError(1);
+          return false;
+        }
+
+        // update IR signal time
+        lastIRTime = currentMillis;
+        return true;
       }
-      return true;
+      Serial.println();
+
     }
-    Serial.println();
 
-
-    delay(500); // delay to prevent multiple inputs
-  } else {
-    return false;
+    IrReceiver.resume();
   }
+
   return false;
 }
 
