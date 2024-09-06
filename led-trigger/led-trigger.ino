@@ -38,9 +38,9 @@
 
 // ARGB pin
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
-#define NUM_LEDS      144
+#define NUM_LEDS      170
 #define LED_PIN       10
-#define MAX_INTENSITY 210    // 255 / 128 / 64 / 32 / 16 / 8
+#define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
 #define LED_RED       5
@@ -975,7 +975,7 @@ void check_colorQueue(cppQueue& q) {
     led[j] = color;
   }
   FastLED.show();
-  delay(2000);
+  delay(1000);
 
   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
   FastLED.show();
