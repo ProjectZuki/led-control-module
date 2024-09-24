@@ -161,7 +161,7 @@ const uint32_t known_hex_codes[] = {
 
 void setup() {
   // built-in LED
-  pinMode(LED_BUILTIN, OUTPUT);
+  // pinMode(LED_BUILTIN, OUTPUT);
 
   // button
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -209,13 +209,30 @@ void setup() {
 
 void loop() {
   // turn on built in LED to confirm functionality
-  // digitalWrite(LED_BUILTIN, HIGH);
+  // digitalWrite(LED_BUILTIN, LOW);
+
+  // // TEMP DEBUG
+  // fill_solid(led, NUM_LEDS, CRGB::Blue);
+  // FastLED.show();
+  // delay(500);
+  // offARGB();
+  // delay(500);
+  // fill_solid(led, NUM_LEDS, CRGB::Red);
+  // FastLED.show();
+  // delay(500);
+  // offARGB();
+  // delay(500);
+  // fill_solid(led, NUM_LEDS, CRGB::Green);
+  // FastLED.show();
+  // delay(500);
+  // offARGB();
+  // delay(500);
 
   check_button();
 
   /// NOTE: uncomment for actual implementation
   // always-on LED will be 25% brightness of the current color
-  // onLED();
+  onLED();
 
   // check for either IR or transmitter data
   validate_IR(IrReceiver);
@@ -252,6 +269,7 @@ void check_button() {
 
     // check for press
     if (currentButtonState == LOW) {
+      Serial.println("Button pressed");
       if ((millis() - buttonPressTime) >= buttonDebounceDelay) {
         // reset cooldown
         buttonPressTime = millis();
@@ -300,6 +318,7 @@ bool check_hex_code(uint32_t hex_code) {
 bool validate_IR(IRrecv IrReceiver) {
   // IR remote instructions
   if (IrReceiver.decode()) {
+    Serial.println("IR signal recieved");
     unsigned long currentMillis = millis();
 
     if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
@@ -427,6 +446,8 @@ void piezo_trigger() {
         BLUE = color.b;
         multicolorQueue.push(&color);
       }
+
+      Serial.println("Piezo triggered");
 
       // Flash LED
       onARGB();
