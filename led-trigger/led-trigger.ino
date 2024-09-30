@@ -37,24 +37,24 @@
 #define IR_RECEIVER_PIN 18
 
 // ARGB pin
-#define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
-#define NUM_LEDS      170
+#define NUM_LEDS      170    // maximum number of LEDs in one given strip (170)
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
 
-#define LED_RED       5
-#define LED_GREEN     6
-#define LED_BLUE      9
+#define LED_RED           5
+#define LED_GREEN         6
+#define LED_BLUE          9
 
-#define BUTTON_PIN    21
+#define BUTTON_PIN        21
 
 // EEPROM addresses
-#define RED_ADDR      0
-#define GREEN_ADDR    1
-#define BLUE_ADDR     2
-#define JUMP3_ADDR    3
-#define JUMP7_ADDR    4
+#define RED_ADDR          0
+#define GREEN_ADDR        1
+#define BLUE_ADDR         2
+#define JUMP3_ADDR        3
+#define JUMP7_ADDR        4
+#define PIEZO_THRESH_ADDR 5
 
 uint8_t RED         = 0;
 uint8_t GREEN       = 0;
@@ -86,7 +86,7 @@ bool DIY1 = false;            // ripple effect
 bool fade3 = false;           // fade off
 bool fade7 = false;           // fade on AND off
 
-// delay threshold for flash duration
+// delay threshold for flash duration in ms
 int DELAY_THRESHOLD = 100;
 
 // debounce
@@ -99,8 +99,8 @@ unsigned long lastIRTime = 0;       // prev debounce time
 unsigned long IRDebounceDelay = 500;        // debounce delay for IR
 
 // For trail ripple effect
-const int TRAIL_LENGTH = 25;
-const int TRAIL_MAX = 10;       // Maximum number of simultaneous trails
+const int TRAIL_LENGTH = 15;
+const int TRAIL_MAX = 80;       // Maximum number of simultaneous trails
 
 struct Trail {
   int position;
@@ -109,11 +109,12 @@ struct Trail {
 };
 
 Trail trails[TRAIL_MAX];
+int nextTrailIndex = 0;   // Next available slot for a new trail
 
 // Color array for rainbow effect
 int color_index = 0;
 
-CRGB RainbowColors[] = {
+CRGB rainbowColors[] = {
   CRGB::Red,
   CRGB::Orange,
   CRGB::Yellow,
@@ -123,7 +124,7 @@ CRGB RainbowColors[] = {
   CRGB::Violet
 };
 
-CRGB RainbowColors2[] = {
+CRGB rainbowColors2[] = {
   CRGB::Pink,
   CRGB::Cyan,
   CRGB::Magenta,
@@ -176,16 +177,16 @@ void setup() {
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_BLUE, OUTPUT);
 
-  // adjust colors in the RainbowColors array to adhere to MAX_INTENSITY
-  for (int i = 0; i < sizeof(RainbowColors) / sizeof(RainbowColors[0]); i++) {
-    RainbowColors[i].r = scale8(RainbowColors[i].r, MAX_INTENSITY);
-    RainbowColors[i].g = scale8(RainbowColors[i].g, MAX_INTENSITY);
-    RainbowColors[i].b = scale8(RainbowColors[i].b, MAX_INTENSITY);
+  // adjust colors in the rainbowColors array to adhere to MAX_INTENSITY
+  for (int i = 0; i < sizeof(rainbowColors) / sizeof(rainbowColors[0]); i++) {
+    rainbowColors[i].r = scale8(rainbowColors[i].r, MAX_INTENSITY);
+    rainbowColors[i].g = scale8(rainbowColors[i].g, MAX_INTENSITY);
+    rainbowColors[i].b = scale8(rainbowColors[i].b, MAX_INTENSITY);
   }
-  for (int i = 0; i < sizeof(RainbowColors2) / sizeof(RainbowColors2[0]); i++) {
-    RainbowColors2[i].r = scale8(RainbowColors2[i].r, MAX_INTENSITY);
-    RainbowColors2[i].g = scale8(RainbowColors2[i].g, MAX_INTENSITY);
-    RainbowColors2[i].b = scale8(RainbowColors2[i].b, MAX_INTENSITY);
+  for (int i = 0; i < sizeof(rainbowColors2) / sizeof(rainbowColors2[0]); i++) {
+    rainbowColors2[i].r = scale8(rainbowColors2[i].r, MAX_INTENSITY);
+    rainbowColors2[i].g = scale8(rainbowColors2[i].g, MAX_INTENSITY);
+    rainbowColors2[i].b = scale8(rainbowColors2[i].b, MAX_INTENSITY);
   }
 
   // piezo
@@ -306,6 +307,23 @@ bool check_hex_code(uint32_t hex_code) {
 }
 
 /**
+ * @brief Processes the IR state
+ * 
+ * This function will check if an IR signal was received, check if the hex code
+ * is valid, and process the hex code.
+ * 
+ * @return True if valid hex code, else False
+ */
+bool IRState() {
+  if (IrReceiver.decode() && check_hex_code(IrReceiver.decodedIRData.command)) {
+      processHexCode(IrReceiver.decodedIRData.command);
+      IrReceiver.resume();
+      return true;
+  }
+  return false;
+}
+
+/**
  * @brief Validates infrared signal
  * 
  * This function takes an IRrecv object to check for IR input. On input, the hex
@@ -368,6 +386,7 @@ void eeprom_read() {
   BLUE = EEPROM.read(BLUE_ADDR);
   jump3 = EEPROM.read(JUMP3_ADDR);
   jump7 = EEPROM.read(JUMP7_ADDR);
+  PIEZO_THRESH = EEPROM.read(PIEZO_THRESH_ADDR);
 }
 
 /**
@@ -385,6 +404,7 @@ void eeprom_save(int red, int green, int blue) {
   EEPROM.write(BLUE_ADDR, blue);
   EEPROM.write(JUMP3_ADDR, jump3);
   EEPROM.write(JUMP7_ADDR, jump7);  
+  EEPROM.write(PIEZO_THRESH_ADDR, PIEZO_THRESH);
 }
 
 /**
@@ -507,7 +527,7 @@ void onARGB() {
       }
     }
   } else {
-    fill_solid(led, NUM_LEDS, jump3? RainbowColors[(color_index++) % sizeof(RainbowColors)] : jump7? RainbowColors2[(color_index++) % sizeof(RainbowColors2)] : CRGB(RED, GREEN, BLUE));
+    fill_solid(led, NUM_LEDS, jump3? rainbowColors[(color_index++) % sizeof(rainbowColors)] : jump7? rainbowColors2[(color_index++) % sizeof(rainbowColors2)] : CRGB(RED, GREEN, BLUE));
     FastLED.show();
   }
 
@@ -553,32 +573,43 @@ void toggleOnOff() {
   onARGB();
   while (ledon) {
     if (IrReceiver.decode()) {
-      if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-        Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
-        // We have an unknown protocol here, print extended info
-        IrReceiver.printIRResultRawFormatted(&Serial, true);
-        IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
-      } else {
-        IrReceiver.resume(); // Early enable receiving of the next IR frame
-        IrReceiver.printIRResultShort(&Serial);
-        IrReceiver.printIRSendUsage(&Serial);
-      }
-      Serial.println();
 
-      if (IrReceiver.decodedIRData.command == 0x41) {
-        ledon = false;
-        offARGB();
-        offLED();
-        break;
-      } else {
-        // apply modifications to color
-        processHexCode(IrReceiver.decodedIRData.command);
+      unsigned long currentMillis = millis();
+
+      if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
+
+        if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
+          Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+          // We have an unknown protocol here, print extended info
+          // DEBUG
+          // IrReceiver.printIRResultRawFormatted(&Serial, true);
+          // IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+        } else {
+          IrReceiver.resume(); // Early enable receiving of the next IR frame
+          // DEBUG
+          // IrReceiver.printIRResultShort(&Serial);
+          // IrReceiver.printIRSendUsage(&Serial);
+
+          /// TODO: Where do i reset debounce??
+          lastIRTime = currentMillis;
+        }
+        Serial.println();
+
+        if (IrReceiver.decodedIRData.command == 0x41) {
+          ledon = false;
+          offARGB();
+          offLED();
+          break;
+        } else {
+          // apply modifications to color
+          processHexCode(IrReceiver.decodedIRData.command);
+        }
+        // update color in case of change
+        onARGB();
+        onLED();
+        delay(200);  // delay to reduce multiple inputs
+        IrReceiver.resume();
       }
-      // update color in case of change
-      onARGB();
-      onLED();
-      delay(200);  // delay to reduce multiple inputs
-      IrReceiver.resume();
     }
   }
 }
@@ -621,8 +652,8 @@ int processHexCode(int IRvalue) {
         Serial.println("Modifier ON");
         return;
       } else {
-        IrReceiver.disableIRIn();
-        Serial.println("IR disabled");
+        // IrReceiver.disableIRIn();
+        // Serial.println("IR disabled");
       }
       break;
 
@@ -898,6 +929,16 @@ void adj_color(uint8_t& color, int scale) {
   Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
 }
 
+CRGB getColor() {
+  if (jump3) {
+    return rainbowColors[(color_index++) % sizeof(rainbowColors)];
+  } else if (jump7) {
+    return rainbowColors2[(color_index++) % sizeof(rainbowColors2)];
+  } else {
+    return CRGB(RED, GREEN, BLUE);
+  }
+}
+
 /**
  * @brief Creates a ripple effect on impact
  * 
@@ -916,9 +957,13 @@ void ripple() {
       if (!trails[i].active) {
         trails[i].position = 0;  // Initialize new trail position at the beginning
         trails[i].active = true;
-        trails[i].color = jump3 ? RainbowColors[color_index] : jump7? RainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
+        // trails[i].color = jump3 ? rainbowColors[color_index] : jump7? rainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
+        trails[i].color = getColor();
         if (jump3) {
-          color_index = (color_index + 1) % (sizeof(RainbowColors) / sizeof(RainbowColors[0]));
+          color_index = (color_index + 1) % (sizeof(rainbowColors) / sizeof(rainbowColors[0]));
+        }
+        if (jump7) {
+          color_index = (color_index + 1) % (sizeof(rainbowColors2) / sizeof(rainbowColors2[0]));
         }
         break;
       }
@@ -977,6 +1022,19 @@ void rainbow_effect() {
       }
       FastLED.show();
       delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
+      // if (IrReceiver.decode()) {
+      //   // check if hex code is valid
+      //   if (check_hex_code(IrReceiver.decodedIRData.command)) {
+      //     // processHexCode(IrReceiver.decodedIRData.command);
+      //     Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
+      //     IrReceiver.resume();
+      //     return;
+      //   } else {
+      //     Serial.print("Received Hex: 0x");
+      //     Serial.println(results.value, HEX);  // Print in HEX format
+      //     IrReceiver.resume();
+      //   }
+      // }
     }
   }
 }
