@@ -37,7 +37,7 @@
 #define IR_RECEIVER_PIN 18
 
 // ARGB pin
-#define NUM_LEDS      5    // maximum number of LEDs in one given strip (170)
+#define NUM_LEDS      15    // maximum number of LEDs in one given strip (170)
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
@@ -726,11 +726,12 @@ int processHexCode(int IRvalue) {
     {
       // if (!modifier) {
         // increase sensitivity
-        PIEZO_THRESH -= 10;
+        PIEZO_THRESH -= 30;
         if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
           PIEZO_THRESH = 10;
         }
-
+        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
       //   // decrease delay (quicker flash)
@@ -756,10 +757,12 @@ int processHexCode(int IRvalue) {
     {
       // if (!modifier) {
         // decrease sensitivity
-        PIEZO_THRESH += 10;
+        PIEZO_THRESH += 30;
         if (PIEZO_THRESH >= 1023) {
           PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
         }
+        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
       //   // increase delay (slower flash)
@@ -1066,6 +1069,48 @@ void flashConfirm() {
     onLED();
     delay(200);
   }
+}
+
+/**
+  * @brief Sets the first 10 of the led[] array for visual based on the current sensitivity value
+  * 
+  * This function will show the sensitivity value on the LED strip.
+  * 
+  * @param val the current sensitivy value based on PIEZO_THRESH
+  * @return N/A
+  */
+
+void showSensitivity(uint16_t val) {
+  // Print current sensitivity value for debugging
+  Serial.print("Sensitivity Value: ");
+  Serial.println(val);
+
+  // Clear the first 10 LEDs
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+
+  // Calculate how many LEDs to light fully based on sensitivity
+  int numLEDsToLight = map(val, 1023, 0, 0, 10);
+  numLEDsToLight = constrain(numLEDsToLight, 0, 10); // Ensure it stays within bounds
+
+  // Print the number of LEDs to light for debugging
+  Serial.print("Number of LEDs to Light: ");
+  Serial.println(numLEDsToLight);
+
+  // Determine brightness levels for fully lit LEDs
+  for (int i = 0; i < numLEDsToLight; i++) {
+    led[i] = CRGB(255, 0, 0); // Set fully lit LEDs to RED
+  }
+
+  // If the sensitivity value falls between two LEDs, fade the final lit LED
+  if (numLEDsToLight < 10) {
+    // Calculate brightness for the last partially lit LED
+    int ledBrightness = map(val, (numLEDsToLight * 102), ((numLEDsToLight + 1) * 102), 255, 0);
+    led[numLEDsToLight] = CRGB(ledBrightness, 0, 0); // Set the next LED with dimmed brightness
+  }
+
+  // Update the LED strip to reflect the changes
+  FastLED.show();
+  delay(300);
 }
 
 // /**
