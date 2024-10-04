@@ -726,12 +726,14 @@ int processHexCode(int IRvalue) {
     {
       // if (!modifier) {
         // increase sensitivity
-        PIEZO_THRESH -= 30;
+        PIEZO_THRESH -= 10;
         if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
           PIEZO_THRESH = 10;
+          // indicate max sensitivity reached
+          flashConfirm(2);
         }
-        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
-        showSensitivity(PIEZO_THRESH);
+        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
       //   // decrease delay (quicker flash)
@@ -757,12 +759,14 @@ int processHexCode(int IRvalue) {
     {
       // if (!modifier) {
         // decrease sensitivity
-        PIEZO_THRESH += 30;
+        PIEZO_THRESH += 10;
         if (PIEZO_THRESH >= 1023) {
           PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
+          // indicate min sensitivity reached
+          flashConfirm(2);
         }
-        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
-        showSensitivity(PIEZO_THRESH);
+        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
       //   // increase delay (slower flash)
@@ -810,7 +814,7 @@ int processHexCode(int IRvalue) {
     {
       /// TODO: Save all values, including jump3/7
       eeprom_save(RED, GREEN, BLUE);    // save current color
-      flashConfirm();                   // flash to confirm save
+      flashConfirm(3);                   // flash to confirm save
       break;
     }
     // ==================== row 10 | DIY 4-6, FLASH ====================================
@@ -1053,8 +1057,8 @@ void check_colorQueue(cppQueue& q) {
  * 
  * @return N/A
  */
-void flashConfirm() {
-  for (int i = 0; i < 3; i ++) {
+void flashConfirm(int val) {
+  for (int i = 0; i < val; i ++) {
     // LED strip indicator
     led[0] = CRGB(RED, GREEN, BLUE);
     FastLED.show();
