@@ -578,7 +578,6 @@ void toggleOnOff() {
           // IrReceiver.printIRResultShort(&Serial);
           // IrReceiver.printIRSendUsage(&Serial);
 
-          /// TODO: Where do i reset debounce??
           lastIRTime = currentMillis;
         }
         Serial.println();
@@ -819,7 +818,6 @@ int processHexCode(int IRvalue) {
     // AUTO(save) | IR lock
     case 0xF:
     {
-      /// TODO: Save all values, including jump3/7
       eeprom_save(RED, GREEN, BLUE);    // save current color
       flashConfirm(3);                   // flash to confirm save
       break;
@@ -1140,7 +1138,6 @@ void showSensitivity(uint16_t val) {
 //   * 1: Invalid IR remote value recieved
 //   * 2: Unknown protocol from IR
 //   */
-//   /// TODO: Modify. Will react with any IR signals (e.g. iPhone Face ID and any other source of IR)
 //   for (int i = 0; i < errorcode; i++) {
 //     led[0] = CRGB(MAX_INTENSITY, 0, 0);
 //     FastLED.show();
