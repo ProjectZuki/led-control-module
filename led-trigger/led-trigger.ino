@@ -37,7 +37,7 @@
 #define IR_RECEIVER_PIN 18
 
 // ARGB pin
-#define NUM_LEDS      170    // maximum number of LEDs in one given strip (170)
+#define NUM_LEDS      240    // maximum number of LEDs in one given strip (170)
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
@@ -74,7 +74,7 @@ IRrecv irrecv(IR_RECEIVER_PIN);
 decode_results results;
 
 // modifier tied to PWR button
-bool modifier = false;
+// bool modifier = false;
 
 // custom effect modifiers
 bool ledonrx = false;         // on/flash mode
@@ -136,28 +136,17 @@ CRGB rainbowColors2[] = {
 
 // All known IR hex codes
 const uint32_t known_hex_codes[] = {
-  // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
-  0x5C, 0x5D, 0x41, 0x40,
-  // ==================== row 2 | Color ==========================================
-  0x58, 0x59, 0x45, 0x44,
-  // ==================== row 3 | Color ==========================================
-  0x54, 0x55, 0x49, 0x48,
-  // ==================== row 4 | Color ==========================================
-  0x50, 0x51, 0x4D, 0x4C,
-  // ==================== row 5 | Color ==========================================
-  0x1C, 0x1D, 0x1E, 0x1F,
-  // ==================== row 6 | Color ==========================================
-  0x18, 0x19, 0x1A, 0x1B,
-  // ==================== row 7 | RED/BLUE/GREEN increase, QUICK ===================
-  0x14, 0x15, 0x16, 0x17,
-  // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
+  0x4,  0x5,  0x6,  0x7,
+  0x8,  0x9,  0xA,  0xB,
+  0xC,  0xD,  0xE,  0xF,
   0x10, 0x11, 0x12, 0x13,
-  // ==================== row 9 | DIY 1-3, AUTO ====================================
-  0xC, 0xD, 0xE, 0xF,
-  // ==================== row 10 | DIY 4-6, FLASH ====================================
-  0x8, 0x9, 0xA, 0xB,
-  // ==================== row 11 | Jump3, Jump7, FADE3, FADE7 ========================
-  0x4, 0x5, 0x6, 0x7
+  0x14, 0x15, 0x16, 0x17,
+  0x18, 0x19, 0x1A, 0x1B,
+  0x1C, 0x1D, 0x1E, 0x1F,
+  0x40, 0x41, 0x44, 0x45,
+  0x48, 0x49, 0x4C, 0x4D,
+  0x50, 0x51, 0x54, 0x55,
+  0x58, 0x59, 0x5C, 0x5D
 };
 
 void setup() {
@@ -196,7 +185,8 @@ void setup() {
 
   // IR
   // Start the receiver, set default feedback LED
-  IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
+  // IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
+  irrecv.enableIRIn();  // Old version of IRremote initialization
 
   // restore color values
   eeprom_read();
@@ -209,30 +199,10 @@ void setup() {
 }
 
 void loop() {
-  // turn on built in LED to confirm functionality
-  // digitalWrite(LED_BUILTIN, LOW);
-
-  // // TEMP DEBUG
-  // fill_solid(led, NUM_LEDS, CRGB::Blue);
-  // FastLED.show();
-  // delay(500);
-  // offARGB();
-  // delay(500);
-  // fill_solid(led, NUM_LEDS, CRGB::Red);
-  // FastLED.show();
-  // delay(500);
-  // offARGB();
-  // delay(500);
-  // fill_solid(led, NUM_LEDS, CRGB::Green);
-  // FastLED.show();
-  // delay(500);
-  // offARGB();
-  // delay(500);
 
   check_button();
 
-  /// NOTE: uncomment for actual implementation
-  // always-on LED will be 25% brightness of the current color
+  // always-on LED indicates current color
   onLED();
 
   // check for either IR or transmitter data
@@ -297,12 +267,23 @@ void check_button() {
  * @param hex_code the hex code to check if it is a known IR signal
  * @return true if the hex code is a known IR signal, false otherwise
  */
-bool check_hex_code(uint32_t hex_code) {
-  for (int i = 0; i < sizeof(known_hex_codes) / sizeof(known_hex_codes[0]); i++) {
-    if (hex_code == known_hex_codes[i]) {
+bool isKnownCode(uint32_t hex_code) {
+  // find using binary search (O(log n) for the win)
+  int low = 0;
+  int high = sizeof(known_hex_codes) / sizeof(known_hex_codes[0]) - 1;
+
+  while (low <= high) {
+    int mid = (low + high) / 2;
+    if (hex_code == known_hex_codes[mid]) {
       return true;
+    } else if (hex_code < known_hex_codes[mid]) {
+      high = mid - 1;
+    } else {
+      low = mid + 1;
     }
   }
+
+  // not found
   return false;
 }
 
@@ -315,7 +296,7 @@ bool check_hex_code(uint32_t hex_code) {
  * @return True if valid hex code, else False
  */
 bool IRState() {
-  if (IrReceiver.decode() && check_hex_code(IrReceiver.decodedIRData.command)) {
+  if (IrReceiver.decode() && isKnownCode(IrReceiver.decodedIRData.command)) {
       processHexCode(IrReceiver.decodedIRData.command);
       IrReceiver.resume();
       return true;
@@ -336,34 +317,37 @@ bool IRState() {
 bool validate_IR(IRrecv IrReceiver) {
   // IR remote instructions
   if (IrReceiver.decode()) {
-    Serial.println("IR signal recieved");
+    // Serial.println("Received IR signal: " + String(IrReceiver.decodedIRData.command, HEX));
+    // store IR command
+    uint16_t command = IrReceiver.decodedIRData.command;
     unsigned long currentMillis = millis();
 
     if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
 
       if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
         // Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
-        // We have an unknown protocol here, print extended info
+        // // We have an unknown protocol here, print extended info
         // IrReceiver.printIRResultRawFormatted(&Serial, true);
         IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
         return false;
       } else {
-        IrReceiver.resume(); // Early enable receiving of the next IR frame
         // IrReceiver.printIRResultShort(&Serial);
         // IrReceiver.printIRSendUsage(&Serial);
-        
-        if (processHexCode(IrReceiver.decodedIRData.command) == -1) {
-          Serial.println("ERROR: IR recieved unknown value: " + String(IrReceiver.decodedIRData.command));
-          // flashError(1);
+
+        if (!isKnownCode(IrReceiver.decodedIRData.command)) {
+          IrReceiver.resume();
           return false;
+        } else {
+          // process IR signal
+          Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
+          processHexCode(IrReceiver.decodedIRData.command);
         }
 
+        IrReceiver.resume(); // Move this to after processing code to prevent multiple inputs
         // update IR signal time
         lastIRTime = currentMillis;
         return true;
       }
-      Serial.println();
-
     }
 
     IrReceiver.resume();
@@ -399,9 +383,11 @@ void eeprom_read() {
  */
 void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
-  EEPROM.write(RED_ADDR, red);
-  EEPROM.write(GREEN_ADDR, green);
-  EEPROM.write(BLUE_ADDR, blue);
+  if (!jump3 && !jump7) {
+    EEPROM.write(RED_ADDR, red);
+    EEPROM.write(GREEN_ADDR, green);
+    EEPROM.write(BLUE_ADDR, blue);
+  }
   EEPROM.write(JUMP3_ADDR, jump3);
   EEPROM.write(JUMP7_ADDR, jump7);  
   EEPROM.write(PIEZO_THRESH_ADDR, PIEZO_THRESH);
@@ -473,7 +459,6 @@ void piezo_trigger() {
       onARGB();
       delay(DELAY_THRESHOLD);
       offARGB();
-      
   }
 }
 
@@ -571,7 +556,9 @@ void toggleOnOff() {
   bool ledon = true;
   // toggle on/off for play/pause button
   onARGB();
+  IrReceiver.resume();
   while (ledon) {
+    Serial.println("LED on");
     if (IrReceiver.decode()) {
 
       unsigned long currentMillis = millis();
@@ -579,23 +566,24 @@ void toggleOnOff() {
       if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
 
         if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-          Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+          // Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
           // We have an unknown protocol here, print extended info
           // DEBUG
           // IrReceiver.printIRResultRawFormatted(&Serial, true);
           // IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+          IrReceiver.resume();
         } else {
           IrReceiver.resume(); // Early enable receiving of the next IR frame
           // DEBUG
           // IrReceiver.printIRResultShort(&Serial);
           // IrReceiver.printIRSendUsage(&Serial);
 
-          /// TODO: Where do i reset debounce??
           lastIRTime = currentMillis;
         }
         Serial.println();
 
         if (IrReceiver.decodedIRData.command == 0x41) {
+          Serial.println("LED off");
           ledon = false;
           offARGB();
           offLED();
@@ -645,16 +633,16 @@ int processHexCode(int IRvalue) {
       break;
     // PWR
     case 0x40:
-      if (!modifier) {
-        modifier = true;    // trigger alt modifier for next input
-        led[0] = CRGB(0, 0, MAX_INTENSITY);
-        FastLED.show();
-        Serial.println("Modifier ON");
-        return;
-      } else {
-        // IrReceiver.disableIRIn();
-        // Serial.println("IR disabled");
-      }
+      // if (!modifier) {
+      //   modifier = true;    // trigger alt modifier for next input
+      //   led[0] = CRGB(0, 0, MAX_INTENSITY);
+      //   FastLED.show();
+      //   Serial.println("Modifier ON");
+      //   return;
+      // } else {
+      //   // IrReceiver.disableIRIn();
+      //   // Serial.println("IR disabled");
+      // }
       break;
 
     // ==================== row 2 | Color ==========================================
@@ -742,19 +730,23 @@ int processHexCode(int IRvalue) {
     // QUICK | Sensitivity down
     case 0x17:
     {
-      if (!modifier) {
+      // if (!modifier) {
         // increase sensitivity
-        PIEZO_THRESH -= 50;
+        PIEZO_THRESH -= 10;
         if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
           PIEZO_THRESH = 10;
+          // indicate max sensitivity reached
+          flashConfirm(2);
         }
-      } else {
-        modifier = false;
-        // decrease delay (quicker flash)
-        DELAY_THRESHOLD -= 50;
-        led[0] = CRGB(0, 0, 0);
-        FastLED.show();
-      }
+        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // showSensitivity(PIEZO_THRESH);
+      // } else {
+      //   modifier = false;
+      //   // decrease delay (quicker flash)
+      //   DELAY_THRESHOLD -= 50;
+      //   led[0] = CRGB(0, 0, 0);
+      //   FastLED.show();
+      // }
       break;
     }
     // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
@@ -771,19 +763,23 @@ int processHexCode(int IRvalue) {
     // SLOW | Sensitivity up
     case 0x13:
     {
-      if (!modifier) {
+      // if (!modifier) {
         // decrease sensitivity
-        PIEZO_THRESH += 50;
+        PIEZO_THRESH += 10;
         if (PIEZO_THRESH >= 1023) {
           PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
+          // indicate min sensitivity reached
+          flashConfirm(2);
         }
-      } else {
-        modifier = false;
-        // increase delay (slower flash)
-        DELAY_THRESHOLD += 50;
-        led[0] = CRGB(0, 0, 0);
-        FastLED.show();
-      }
+        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // showSensitivity(PIEZO_THRESH);
+      // } else {
+      //   modifier = false;
+      //   // increase delay (slower flash)
+      //   DELAY_THRESHOLD += 50;
+      //   led[0] = CRGB(0, 0, 0);
+      //   FastLED.show();
+      // }
       break;
     }
     // ==================== row 9 | DIY 1-3, AUTO ====================================
@@ -822,9 +818,8 @@ int processHexCode(int IRvalue) {
     // AUTO(save) | IR lock
     case 0xF:
     {
-      /// TODO: Save all values, including jump3/7
       eeprom_save(RED, GREEN, BLUE);    // save current color
-      flashConfirm();                   // flash to confirm save
+      flashConfirm(3);                   // flash to confirm save
       break;
     }
     // ==================== row 10 | DIY 4-6, FLASH ====================================
@@ -861,7 +856,8 @@ int processHexCode(int IRvalue) {
     case 0x5:
       // other rainbow effect
       jump7 = true;
-      break;
+      return;
+      // break;
     // FADE3
     case 0x6:
       fade3 = true;
@@ -882,7 +878,7 @@ int processHexCode(int IRvalue) {
   jump7 = false;
   // fade3 = false;
   // fade7 = false;
-  modifier = false;
+  // modifier = false;
   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
   FastLED.show();
   return IRvalue;
@@ -1002,7 +998,8 @@ void ripple() {
   }
 
   FastLED.show();
-  delay(1); // Adjust the delay for the speed of the ripple
+  // delay(1); // Adjust the delay for the speed of the ripple
+  delayMicroseconds(100); // Adjust the delay for the speed of the ripple
 }
 
 /**
@@ -1024,7 +1021,7 @@ void rainbow_effect() {
       delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
       // if (IrReceiver.decode()) {
       //   // check if hex code is valid
-      //   if (check_hex_code(IrReceiver.decodedIRData.command)) {
+      //   if (isKnownCode(IrReceiver.decodedIRData.command)) {
       //     // processHexCode(IrReceiver.decodedIRData.command);
       //     Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
       //     IrReceiver.resume();
@@ -1067,22 +1064,64 @@ void check_colorQueue(cppQueue& q) {
  * 
  * @return N/A
  */
-void flashConfirm() {
-  for (int i = 0; i < 3; i ++) {
+void flashConfirm(int val) {
+  for (int i = 0; i < val; i ++) {
+    // LED strip indicator
     led[0] = CRGB(RED, GREEN, BLUE);
     FastLED.show();
 
-    onLED();
-
+    offLED();
     delay(200);
-    // led[0] = CRGB(0, 0, 0);
-    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+
+    // LED strip indicator
+    fill_solid(led, NUM_LEDS, CRGB::Black);
     FastLED.show();
 
-    offLED();
-
+    onLED();
     delay(200);
   }
+}
+
+/**
+  * @brief Sets the first 10 of the led[] array for visual based on the current sensitivity value
+  * 
+  * This function will show the sensitivity value on the LED strip.
+  * 
+  * @param val the current sensitivy value based on PIEZO_THRESH
+  * @return N/A
+  */
+
+void showSensitivity(uint16_t val) {
+  // Print current sensitivity value for debugging
+  Serial.print("Sensitivity Value: ");
+  Serial.println(val);
+
+  // Clear the first 10 LEDs
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+
+  // Calculate how many LEDs to light fully based on sensitivity
+  int numLEDsToLight = map(val, 1023, 0, 0, 10);
+  numLEDsToLight = constrain(numLEDsToLight, 0, 10); // Ensure it stays within bounds
+
+  // Print the number of LEDs to light for debugging
+  Serial.print("Number of LEDs to Light: ");
+  Serial.println(numLEDsToLight);
+
+  // Determine brightness levels for fully lit LEDs
+  for (int i = 0; i < numLEDsToLight; i++) {
+    led[i] = CRGB(255, 0, 0); // Set fully lit LEDs to RED
+  }
+
+  // If the sensitivity value falls between two LEDs, fade the final lit LED
+  if (numLEDsToLight < 10) {
+    // Calculate brightness for the last partially lit LED
+    int ledBrightness = map(val, (numLEDsToLight * 102), ((numLEDsToLight + 1) * 102), 255, 0);
+    led[numLEDsToLight] = CRGB(ledBrightness, 0, 0); // Set the next LED with dimmed brightness
+  }
+
+  // Update the LED strip to reflect the changes
+  FastLED.show();
+  delay(300);
 }
 
 // /**
@@ -1099,7 +1138,6 @@ void flashConfirm() {
 //   * 1: Invalid IR remote value recieved
 //   * 2: Unknown protocol from IR
 //   */
-//   /// TODO: Modify. Will react with any IR signals (e.g. iPhone Face ID and any other source of IR)
 //   for (int i = 0; i < errorcode; i++) {
 //     led[0] = CRGB(MAX_INTENSITY, 0, 0);
 //     FastLED.show();
