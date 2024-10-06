@@ -37,7 +37,7 @@
 #define IR_RECEIVER_PIN 18
 
 // ARGB pin
-#define NUM_LEDS      15    // maximum number of LEDs in one given strip (170)
+#define NUM_LEDS      240    // maximum number of LEDs in one given strip (170)
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
@@ -339,6 +339,7 @@ bool validate_IR(IRrecv IrReceiver) {
           return false;
         } else {
           // process IR signal
+          Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
           processHexCode(IrReceiver.decodedIRData.command);
         }
 
@@ -382,9 +383,11 @@ void eeprom_read() {
  */
 void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
-  EEPROM.write(RED_ADDR, red);
-  EEPROM.write(GREEN_ADDR, green);
-  EEPROM.write(BLUE_ADDR, blue);
+  if (!jump3 && !jump7) {
+    EEPROM.write(RED_ADDR, red);
+    EEPROM.write(GREEN_ADDR, green);
+    EEPROM.write(BLUE_ADDR, blue);
+  }
   EEPROM.write(JUMP3_ADDR, jump3);
   EEPROM.write(JUMP7_ADDR, jump7);  
   EEPROM.write(PIEZO_THRESH_ADDR, PIEZO_THRESH);
@@ -553,7 +556,9 @@ void toggleOnOff() {
   bool ledon = true;
   // toggle on/off for play/pause button
   onARGB();
+  IrReceiver.resume();
   while (ledon) {
+    Serial.println("LED on");
     if (IrReceiver.decode()) {
 
       unsigned long currentMillis = millis();
@@ -561,11 +566,12 @@ void toggleOnOff() {
       if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
 
         if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-          Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+          // Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
           // We have an unknown protocol here, print extended info
           // DEBUG
           // IrReceiver.printIRResultRawFormatted(&Serial, true);
           // IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+          IrReceiver.resume();
         } else {
           IrReceiver.resume(); // Early enable receiving of the next IR frame
           // DEBUG
@@ -578,6 +584,7 @@ void toggleOnOff() {
         Serial.println();
 
         if (IrReceiver.decodedIRData.command == 0x41) {
+          Serial.println("LED off");
           ledon = false;
           offARGB();
           offLED();
@@ -732,7 +739,7 @@ int processHexCode(int IRvalue) {
           // indicate max sensitivity reached
           flashConfirm(2);
         }
-        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
         // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
@@ -765,7 +772,7 @@ int processHexCode(int IRvalue) {
           // indicate min sensitivity reached
           flashConfirm(2);
         }
-        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
         // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
@@ -851,7 +858,8 @@ int processHexCode(int IRvalue) {
     case 0x5:
       // other rainbow effect
       jump7 = true;
-      break;
+      return;
+      // break;
     // FADE3
     case 0x6:
       fade3 = true;
@@ -992,7 +1000,8 @@ void ripple() {
   }
 
   FastLED.show();
-  delay(1); // Adjust the delay for the speed of the ripple
+  // delay(1); // Adjust the delay for the speed of the ripple
+  delayMicroseconds(100); // Adjust the delay for the speed of the ripple
 }
 
 /**
