@@ -114,6 +114,29 @@ int nextTrailIndex = 0;   // Next available slot for a new trail
 // Color array for rainbow effect
 int color_index = 0;
 
+struct LEDState
+{
+  /* data */
+  unsigned int sensitivity;     // piezo sensitivity
+  
+  CRGB color;                   // current RGB color
+
+  bool ledonrx = false;         // on/flash mode
+  bool rainboweffectrx = false; // rainbow effect
+  bool jump3 = false;           // rainbow colors
+  bool jump7 = false;           // rainbow2 colors
+  bool multicolor = false;      // multicolor effect
+  bool DIY1 = false;            // ripple effect
+  bool fade3 = false;           // fade off
+  bool fade7 = false;           // fade on AND off
+
+  // create a queue of CRGB values
+  cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
+  // queue for multicolor effect
+  cppQueue multicolorQueue(sizeof(CRGB), 5, FIFO);
+};
+
+
 CRGB rainbowColors[] = {
   CRGB::Red,
   CRGB::Orange,
@@ -227,6 +250,7 @@ void loop() {
  * will be popped and set as the current color.
  * 
  * @return N/A
+ * TODO: Pop LEDState object rather than colors
  */
 void check_button() {
   // check button for input
@@ -362,6 +386,7 @@ bool validate_IR(IRrecv IrReceiver) {
  * This function reads and retrieves saved data from EEPROM
  * 
  * @return N/A
+ * TODO: Read LEDState object rather than colors
  */
 void eeprom_read() {
   // read from EEPROM
@@ -380,6 +405,7 @@ void eeprom_read() {
  * 
  * @param red, green, blue the RGB colors to be saved to EEPROM
  * @return N/A
+ * TODO: Save LEDState object rather than colors
  */
 void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
@@ -400,6 +426,7 @@ void eeprom_save(int red, int green, int blue) {
  * 
  * @param red, green, blue the RGB colors to be pushed to the queue
  * @return N/A
+ * TODO: Push LEDState object rather than colors.
  */
 void pushback(cppQueue& q, int red, int green, int blue) {
   // save CRGB value to stack
