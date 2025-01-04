@@ -87,7 +87,7 @@ bool fade3 = false;           // fade off
 bool fade7 = false;           // fade on AND off
 
 // delay threshold for flash duration in ms
-int DELAY_THRESHOLD = 100;
+unsigned int DELAY_THRESHOLD = 100;
 
 // debounce
 int lastButtonState = LOW;                  // prev button state
@@ -240,7 +240,7 @@ void check_button() {
 
     // check for press
     if (currentButtonState == LOW) {
-      Serial.println("Button pressed");
+      // Serial.println("Button pressed");
       if ((millis() - buttonPressTime) >= buttonDebounceDelay) {
         // reset cooldown
         buttonPressTime = millis();
@@ -339,7 +339,7 @@ bool validate_IR(IRrecv IrReceiver) {
           return false;
         } else {
           // process IR signal
-          Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
+          // Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
           processHexCode(IrReceiver.decodedIRData.command);
         }
 
@@ -453,7 +453,7 @@ void piezo_trigger() {
         multicolorQueue.push(&color);
       }
 
-      Serial.println("Piezo triggered");
+      // Serial.println("Piezo triggered");
 
       // Flash LED
       onARGB();
@@ -558,7 +558,7 @@ void toggleOnOff() {
   onARGB();
   IrReceiver.resume();
   while (ledon) {
-    Serial.println("LED on");
+    // Serial.println("LED on");
     if (IrReceiver.decode()) {
 
       unsigned long currentMillis = millis();
@@ -580,10 +580,10 @@ void toggleOnOff() {
 
           lastIRTime = currentMillis;
         }
-        Serial.println();
+        // Serial.println();
 
         if (IrReceiver.decodedIRData.command == 0x41) {
-          Serial.println("LED off");
+          // Serial.println("LED off");
           ledon = false;
           offARGB();
           offLED();
@@ -619,12 +619,27 @@ int processHexCode(int IRvalue) {
     // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
 
     // increase brightness
+    /** 
+     * TODO: Replace brightness change with Brightness duration
+     */
     case 0x5C:
-      FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
+      // FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
+      DELAY_THRESHOLD += 10;
+      if (DELAY_THRESHOLD >= 1000) {
+        DELAY_THRESHOLD = constrain(DELAY_THRESHOLD, 10, 1000);
+        // indicate max brightness reached
+        flashConfirm(1);
+      }
       break;
     // decrease brightness
     case 0x5D:
-      FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
+      // FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
+      DELAY_THRESHOLD -= 10;
+      if (DELAY_THRESHOLD <= 10) {
+        DELAY_THRESHOLD = constrain(DELAY_THRESHOLD, 10, 1000);
+        // indicate min brightness reached
+        flashConfirm(1);
+      }
       break;
     // play/pause
     case 0x41:
@@ -738,7 +753,7 @@ int processHexCode(int IRvalue) {
           // indicate max sensitivity reached
           flashConfirm(2);
         }
-        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
         // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
@@ -771,7 +786,7 @@ int processHexCode(int IRvalue) {
           // indicate min sensitivity reached
           flashConfirm(2);
         }
-        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
         // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
@@ -869,7 +884,7 @@ int processHexCode(int IRvalue) {
     
     // Default print error for debug
     default:
-      Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
+      // Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
       // flashError(2);
       return -1;
   }
@@ -921,8 +936,8 @@ void adj_color(uint8_t& color, int scale) {
   color = newColor;
 
   // Debug
-  Serial.println("Adjusted color: " + String(color));
-  Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+  // Serial.println("Adjusted color: " + String(color));
+  // Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
 }
 
 CRGB getColor() {
@@ -940,6 +955,8 @@ CRGB getColor() {
  * 
  * This function will create a ripple effect on the ARGB LED strip each time the
  *  piezo sensor is hit.
+ * 
+ * TODO: Find way to end ripple effect or change color during effect.
  * 
  * @return N/A
  */
@@ -1019,6 +1036,11 @@ void rainbow_effect() {
       }
       FastLED.show();
       delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
+      
+      /**
+       * TODO: Find way to end rainbow effect.
+       */
+
       // if (IrReceiver.decode()) {
       //   // check if hex code is valid
       //   if (isKnownCode(IrReceiver.decodedIRData.command)) {
@@ -1066,16 +1088,16 @@ void check_colorQueue(cppQueue& q) {
  */
 void flashConfirm(int val) {
   for (int i = 0; i < val; i ++) {
-    // LED strip indicator
-    led[0] = CRGB(RED, GREEN, BLUE);
-    FastLED.show();
+    // // LED strip indicator
+    // led[0] = CRGB(RED, GREEN, BLUE);
+    // FastLED.show();
 
     offLED();
     delay(200);
 
-    // LED strip indicator
-    fill_solid(led, NUM_LEDS, CRGB::Black);
-    FastLED.show();
+    // // LED strip indicator
+    // fill_solid(led, NUM_LEDS, CRGB::Black);
+    // FastLED.show();
 
     onLED();
     delay(200);
@@ -1093,8 +1115,8 @@ void flashConfirm(int val) {
 
 void showSensitivity(uint16_t val) {
   // Print current sensitivity value for debugging
-  Serial.print("Sensitivity Value: ");
-  Serial.println(val);
+  // Serial.print("Sensitivity Value: ");
+  // Serial.println(val);
 
   // Clear the first 10 LEDs
   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
@@ -1104,8 +1126,8 @@ void showSensitivity(uint16_t val) {
   numLEDsToLight = constrain(numLEDsToLight, 0, 10); // Ensure it stays within bounds
 
   // Print the number of LEDs to light for debugging
-  Serial.print("Number of LEDs to Light: ");
-  Serial.println(numLEDsToLight);
+  // Serial.print("Number of LEDs to Light: ");
+  // Serial.println(numLEDsToLight);
 
   // Determine brightness levels for fully lit LEDs
   for (int i = 0; i < numLEDsToLight; i++) {
