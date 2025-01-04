@@ -183,6 +183,9 @@ void setup() {
   // debug
   Serial.begin(9600);
 
+  // add delay to stabilize components
+  delay(500);
+
   // IR
   // Start the receiver, set default feedback LED
   // IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
@@ -619,16 +622,13 @@ int processHexCode(int IRvalue) {
     // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
 
     // increase brightness
-    /** 
-     * TODO: Replace brightness change with Brightness duration
-     */
     case 0x5C:
       // FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
       DELAY_THRESHOLD += 10;
       if (DELAY_THRESHOLD >= 1000) {
         DELAY_THRESHOLD = constrain(DELAY_THRESHOLD, 10, 1000);
         // indicate max brightness reached
-        flashConfirm(1);
+        flashConfirm(2);
       }
       break;
     // decrease brightness
@@ -638,7 +638,7 @@ int processHexCode(int IRvalue) {
       if (DELAY_THRESHOLD <= 10) {
         DELAY_THRESHOLD = constrain(DELAY_THRESHOLD, 10, 1000);
         // indicate min brightness reached
-        flashConfirm(1);
+        flashConfirm(2);
       }
       break;
     // play/pause
@@ -842,7 +842,7 @@ int processHexCode(int IRvalue) {
     // DIY4
     case 0x8:
       rainbow_effect();
-      break;
+      return;
     // DIY5
     case 0x9:
       multicolor = !multicolor;
@@ -956,7 +956,6 @@ CRGB getColor() {
  * This function will create a ripple effect on the ARGB LED strip each time the
  *  piezo sensor is hit.
  * 
- * TODO: Find way to end ripple effect or change color during effect.
  * 
  * @return N/A
  */
@@ -1028,35 +1027,46 @@ void ripple() {
  * 
  * @return N/A
  */
-void rainbow_effect() {
-  while (true) {
-    for (int j = 0; j < 255; j++) {
-      for (int i = 0; i < NUM_LEDS; i++) {
-        led[i] = CHSV(i - (j * 2), 255, 255); /* The higher the value 4 the less fade there is and vice versa */ 
-      }
-      FastLED.show();
-      delay(25); /* Change this to your hearts desire, the lower the value the faster your colors move (and vice versa) */
-      
-      /**
-       * TODO: Find way to end rainbow effect.
-       */
+unsigned long previousMillis = 0;
+const long interval = 25;  // Adjust as needed for smoothness
 
-      // if (IrReceiver.decode()) {
-      //   // check if hex code is valid
-      //   if (isKnownCode(IrReceiver.decodedIRData.command)) {
-      //     // processHexCode(IrReceiver.decodedIRData.command);
-      //     Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
-      //     IrReceiver.resume();
-      //     return;
-      //   } else {
-      //     Serial.print("Received Hex: 0x");
-      //     Serial.println(results.value, HEX);  // Print in HEX format
-      //     IrReceiver.resume();
-      //   }
-      // }
+void rainbow_effect() {
+  bool flag = true;
+  IrReceiver.resume(); // Ready to receive IR signals
+
+  while (flag) {
+    unsigned long currentMillis = millis();
+    
+    // Update LED colors only if the interval has passed
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+      
+      for (int j = 0; j < 255; j++) {
+        for (int i = 0; i < NUM_LEDS; i++) {
+          led[i] = CHSV(i - (j * 2), 255, 255);  // Update color
+        }
+        FastLED.show();
+      }
+
+      // Check for IR input
+      if (IrReceiver.available() && IrReceiver.decode()) {
+        auto input = IrReceiver.decodedIRData.command;
+        
+        if (isKnownCode(input)) {
+          Serial.println("IR signal received: 0x" + String(IrReceiver.decodedIRData.command, HEX));
+          offARGB();  // Turn off LEDs if the signal is valid
+          return;     // Exit rainbow effect
+        } else {
+          Serial.println("INVALID signal received: 0x" + String(IrReceiver.decodedIRData.decodedRawData, HEX));
+          irrecv.enableIRIn();  // Re-enable IR receiver
+        }
+        
+        IrReceiver.resume();  // Prepare for the next IR signal
+      }
     }
   }
 }
+
 
 /**
  * @brief Visualizes the color queue
