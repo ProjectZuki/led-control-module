@@ -240,7 +240,7 @@ void check_button() {
 
     // check for press
     if (currentButtonState == LOW) {
-      Serial.println("Button pressed");
+      // Serial.println("Button pressed");
       if ((millis() - buttonPressTime) >= buttonDebounceDelay) {
         // reset cooldown
         buttonPressTime = millis();
@@ -339,7 +339,7 @@ bool validate_IR(IRrecv IrReceiver) {
           return false;
         } else {
           // process IR signal
-          Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
+          // Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
           processHexCode(IrReceiver.decodedIRData.command);
         }
 
@@ -453,7 +453,7 @@ void piezo_trigger() {
         multicolorQueue.push(&color);
       }
 
-      Serial.println("Piezo triggered");
+      // Serial.println("Piezo triggered");
 
       // Flash LED
       onARGB();
@@ -580,7 +580,7 @@ void toggleOnOff() {
 
           lastIRTime = currentMillis;
         }
-        Serial.println();
+        // Serial.println();
 
         if (IrReceiver.decodedIRData.command == 0x41) {
           // Serial.println("LED off");
@@ -753,7 +753,7 @@ int processHexCode(int IRvalue) {
           // indicate max sensitivity reached
           flashConfirm(2);
         }
-        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
         // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
@@ -786,7 +786,7 @@ int processHexCode(int IRvalue) {
           // indicate min sensitivity reached
           flashConfirm(2);
         }
-        Serial.println("Sensitivity: " + String(PIEZO_THRESH));
+        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
         // showSensitivity(PIEZO_THRESH);
       // } else {
       //   modifier = false;
@@ -884,7 +884,7 @@ int processHexCode(int IRvalue) {
     
     // Default print error for debug
     default:
-      Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
+      // Serial.println("ERROR: IR recieved unknown value: " + String(IRvalue));
       // flashError(2);
       return -1;
   }
@@ -936,8 +936,8 @@ void adj_color(uint8_t& color, int scale) {
   color = newColor;
 
   // Debug
-  Serial.println("Adjusted color: " + String(color));
-  Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+  // Serial.println("Adjusted color: " + String(color));
+  // Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
 }
 
 CRGB getColor() {
@@ -1115,8 +1115,8 @@ void flashConfirm(int val) {
 
 void showSensitivity(uint16_t val) {
   // Print current sensitivity value for debugging
-  Serial.print("Sensitivity Value: ");
-  Serial.println(val);
+  // Serial.print("Sensitivity Value: ");
+  // Serial.println(val);
 
   // Clear the first 10 LEDs
   fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
@@ -1126,8 +1126,8 @@ void showSensitivity(uint16_t val) {
   numLEDsToLight = constrain(numLEDsToLight, 0, 10); // Ensure it stays within bounds
 
   // Print the number of LEDs to light for debugging
-  Serial.print("Number of LEDs to Light: ");
-  Serial.println(numLEDsToLight);
+  // Serial.print("Number of LEDs to Light: ");
+  // Serial.println(numLEDsToLight);
 
   // Determine brightness levels for fully lit LEDs
   for (int i = 0; i < numLEDsToLight; i++) {
