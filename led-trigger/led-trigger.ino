@@ -34,7 +34,7 @@
 // #include <SoftwareSerial.h>   // HC-12 module
 
 // IR receiver pin
-#define IR_RECEIVER_PIN 18
+#define IR_RECEIVER_PIN A4    // 18 -> A4
 
 // ARGB pin
 #define NUM_LEDS      240    // maximum number of LEDs in one given strip (170)
@@ -46,7 +46,7 @@ CRGB led[NUM_LEDS];
 #define LED_GREEN         6
 #define LED_BLUE          9
 
-#define BUTTON_PIN        21
+#define BUTTON_PIN        A3  // 21 -> A3
 
 // EEPROM addresses
 #define RED_ADDR          0
@@ -255,6 +255,7 @@ void check_button() {
           RED = color.r;
           GREEN = color.g;
           BLUE = color.b;
+          onLED();
         }
       }
 
@@ -778,23 +779,12 @@ int processHexCode(int IRvalue) {
     // SLOW | Sensitivity up
     case 0x13:
     {
-      // if (!modifier) {
-        // decrease sensitivity
-        PIEZO_THRESH += 10;
-        if (PIEZO_THRESH >= 1023) {
-          PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
-          // indicate min sensitivity reached
-          flashConfirm(2);
-        }
-        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
-        // showSensitivity(PIEZO_THRESH);
-      // } else {
-      //   modifier = false;
-      //   // increase delay (slower flash)
-      //   DELAY_THRESHOLD += 50;
-      //   led[0] = CRGB(0, 0, 0);
-      //   FastLED.show();
-      // }
+      PIEZO_THRESH += 10;
+      if (PIEZO_THRESH >= 1023) {
+        PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
+        // indicate min sensitivity reached
+        flashConfirm(2);
+      }
       break;
     }
     // ==================== row 9 | DIY 1-3, AUTO ====================================
@@ -804,16 +794,16 @@ int processHexCode(int IRvalue) {
     case 0xC:
     {
       // loop until IR signal is received
-      while (true) {
-        // continue checking for valid IR signal
-        if (IrReceiver.decode()) {
-          if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
-            break;
-          }
-          IrReceiver.resume();    // resume IR input
-        }
+      // while (true) {
         ripple();
-      }
+      //   // continue checking for valid IR signal
+      //   if (IrReceiver.decode()) {
+      //     if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
+      //       break;
+      //     }
+      //     IrReceiver.resume();    // resume IR input
+      //   }
+      // }
       break;
     }
     // DIY2
@@ -956,67 +946,75 @@ CRGB getColor() {
  * This function will create a ripple effect on the ARGB LED strip each time the
  *  piezo sensor is hit.
  * 
+ * TODO: Find way to end ripple effect or change color during effect.
  * 
  * @return N/A
  */
 void ripple() {
-  // Read the piezo value
-  int piezoValue = analogRead(PIEZO_PIN);
+    IrReceiver.resume(); // Ensure the receiver is cleared before starting
+    unsigned long lastUpdateTime = 0;
 
-  if (piezoValue > PIEZO_THRESH) {
-    // Add a new trail if there is room
-    for (int i = 0; i < TRAIL_MAX; i++) {
-      if (!trails[i].active) {
-        trails[i].position = 0;  // Initialize new trail position at the beginning
-        trails[i].active = true;
-        // trails[i].color = jump3 ? rainbowColors[color_index] : jump7? rainbowColors[color_index] : CRGB(RED, GREEN, BLUE);
-        trails[i].color = getColor();
-        if (jump3) {
-          color_index = (color_index + 1) % (sizeof(rainbowColors) / sizeof(rainbowColors[0]));
+    while (true) {
+        // // Check for IR signals
+        // if (IrReceiver.decode()) {
+        //     auto input = IrReceiver.decodedIRData.command;
+
+        //     if (isKnownCode(input)) {
+        //         Serial.println("IR signal received: 0x" + String(input, HEX));
+        //         IrReceiver.resume();
+        //         return; // Exit the ripple function
+        //     } else {
+        //         Serial.println("Invalid signal received: 0x" + String(input, HEX));
+        //         IrReceiver.printIRResultRawFormatted(&Serial);
+        //         IrReceiver.resume();
+        //     }
+        // }
+
+        // Limit how frequently LEDs update
+        if (millis() - lastUpdateTime > 10) { // 10 ms per update
+            lastUpdateTime = millis();
+
+            // Read the piezo value
+            int piezoValue = analogRead(PIEZO_PIN);
+
+            if (piezoValue > PIEZO_THRESH) {
+                // Add a new trail if there is room
+                for (int i = 0; i < TRAIL_MAX; i++) {
+                    if (!trails[i].active) {
+                        trails[i].position = 0;
+                        trails[i].active = true;
+                        trails[i].color = getColor();
+                        break;
+                    }
+                }
+            }
+
+            // Clear and update LED trails
+            fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+
+            for (int t = 0; t < TRAIL_MAX; t++) {
+                if (trails[t].active) {
+                    for (int j = 0; j < TRAIL_LENGTH; j++) {
+                        int pos = trails[t].position - j;
+                        if (pos >= 0 && pos < NUM_LEDS) {
+                            led[pos] = trails[t].color;
+                        }
+                    }
+
+                    trails[t].position++;
+                    if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH) {
+                        trails[t].active = false;
+                    }
+                }
+            }
+
+            FastLED.show(); // Update LEDs
         }
-        if (jump7) {
-          color_index = (color_index + 1) % (sizeof(rainbowColors2) / sizeof(rainbowColors2[0]));
-        }
-        break;
-      }
+
+        delayMicroseconds(100); // Small delay to prevent overloading
     }
-  }
-
-  // Clear the LED array for each frame
-  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-  
-  // Update and display the trails
-  for (int t = 0; t < TRAIL_MAX; t++) {
-    if (trails[t].active) {
-      // Draw the current trail with a gap
-      for (int j = 0; j < TRAIL_LENGTH; j++) {
-        int pos = trails[t].position - j;
-        if (pos >= 0 && pos < NUM_LEDS) {
-          led[pos] = trails[t].color;
-        }
-      }
-
-      // Clear the LED just before the trail to create a gap
-      int gapPos = trails[t].position - TRAIL_LENGTH;
-      if (gapPos >= 0 && gapPos < NUM_LEDS) {
-        led[gapPos] = CRGB(0, 0, 0);
-      }
-      
-      // Update the position for the next frame
-      trails[t].position++;
-
-      // Deactivate the trail if it has moved past the LED strip
-      if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH + 1) { // Add 1 for the gap
-        trails[t].active = false;
-        trails[t].position = -1; // Reset position
-      }
-    }
-  }
-
-  FastLED.show();
-  // delay(1); // Adjust the delay for the speed of the ripple
-  delayMicroseconds(100); // Adjust the delay for the speed of the ripple
 }
+
 
 /**
  * @brief Creates a rainbow effect
