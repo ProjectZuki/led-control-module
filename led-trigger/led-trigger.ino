@@ -8,6 +8,8 @@
  *
  * @author     Willie Alcaraz ([Project]Zuki)
  * @date       August 2024
+ * 
+ * @note       Atmega328p
  *
  * @copyright  
  * © 2024 [Project]Zuki. All rights reserved.
@@ -30,86 +32,62 @@
 #include <IRremote.h>         // IR remote
 #include <FastLED.h>          // NeoPixel ARGB
 #include <EEPROM.h>           // save ROM data durong off state
-#include <cppQueue.h>         // queue for RGB color states
-// #include <SoftwareSerial.h>   // HC-12 module
+#include <Arduino.h>          // standard Arduino functions
+#include <avr/pgmspace.h>     // PROGMEM
+// #include <cppQueue.h>         // queue for RGB color states
+// #include <stdint.h>
 
-// IR receiver pin
+
+// ================================ IR Receiver ================================
+
 #define IR_RECEIVER_PIN A4    // 18 -> A4
-
-// ARGB pin
-#define NUM_LEDS      240    // maximum number of LEDs in one given strip (170)
-#define LED_PIN       10
-#define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
-CRGB led[NUM_LEDS];
-
-#define LED_RED           5
-#define LED_GREEN         6
-#define LED_BLUE          9
-
-#define BUTTON_PIN        A3  // 21 -> A3
-
-// EEPROM addresses
-#define RED_ADDR          0
-#define GREEN_ADDR        1
-#define BLUE_ADDR         2
-#define JUMP3_ADDR        3
-#define JUMP7_ADDR        4
-#define PIEZO_THRESH_ADDR 5
-
-uint8_t RED         = 0;
-uint8_t GREEN       = 0;
-uint8_t BLUE        = 0;
-
-// create a queue of CRGB values
-cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
-// queue for multicolor effect
-cppQueue multicolorQueue(sizeof(CRGB), 5, FIFO);
-
-// piezo pin
-#define PIEZO_PIN     A0
-unsigned int PIEZO_THRESH = 300;
 
 // IR
 IRrecv irrecv(IR_RECEIVER_PIN);
 decode_results results;
 
-// modifier tied to PWR button
-// bool modifier = false;
+volatile unsigned long lastIRTime = 0;       // prev debounce time
+unsigned long IRDebounceDelay = 500;        // debounce delay for IR
 
-// custom effect modifiers
-bool ledonrx = false;         // on/flash mode
-bool rainboweffectrx = false; // rainbow effect
-bool jump3 = false;           // rainbow colors
-bool jump7 = false;           // rainbow2 colors
-bool multicolor = false;      // multicolor effect
-bool DIY1 = false;            // ripple effect
-bool fade3 = false;           // fade off
-bool fade7 = false;           // fade on AND off
+// Store known IR hex codes in Flash memory
+const uint8_t known_hex_codes[] PROGMEM = {
+  0x04, 0x05, 0x06, 0x07,
+  0x08, 0x09, 0x0A, 0x0B,
+  0x0C, 0x0D, 0x0E, 0x0F,
+  0x10, 0x11, 0x12, 0x13,
+  0x14, 0x15, 0x16, 0x17,
+  0x18, 0x19, 0x1A, 0x1B,
+  0x1C, 0x1D, 0x1E, 0x1F,
+  0x40, 0x41, 0x44, 0x45,
+  0x48, 0x49, 0x4C, 0x4D,
+  0x50, 0x51, 0x54, 0x55,
+  0x58, 0x59, 0x5C, 0x5D
+};
+
+#define CODE_COUNT (sizeof(known_hex_codes) / sizeof(known_hex_codes[0]))
+
+// =============================== ARGB LED Strip ==============================
+
+// ARGB pin
+#define NUM_LEDS      150    // maximum number of LEDs in one given strip (170)
+#define LED_PIN       10
+#define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
+CRGB led[NUM_LEDS];
 
 // delay threshold for flash duration in ms
 unsigned int DELAY_THRESHOLD = 100;
 
-// debounce
-int lastButtonState = LOW;                  // prev button state
-int buttonState;                            // current button state
-unsigned long buttonPressTime = 0;   // prev debounce time
-unsigned long buttonDebounceDelay = 1000;     // debounce delay for button
+// =================================== RGB LED =================================
 
-unsigned long lastIRTime = 0;       // prev debounce time
-unsigned long IRDebounceDelay = 500;        // debounce delay for IR
+#define LED_RED           5
+#define LED_GREEN         6
+#define LED_BLUE          9
 
-// For trail ripple effect
-const int TRAIL_LENGTH = 15;
-const int TRAIL_MAX = 80;       // Maximum number of simultaneous trails
+// ================================ Color Data =================================
 
-struct Trail {
-  int position;
-  bool active;
-  CRGB color;
-};
-
-Trail trails[TRAIL_MAX];
-int nextTrailIndex = 0;   // Next available slot for a new trail
+uint8_t RED         = 0;
+uint8_t GREEN       = 0;
+uint8_t BLUE        = 0;
 
 // Color array for rainbow effect
 int color_index = 0;
@@ -134,20 +112,69 @@ CRGB rainbowColors2[] = {
   CRGB::Aqua
 };
 
-// All known IR hex codes
-const uint32_t known_hex_codes[] = {
-  0x4,  0x5,  0x6,  0x7,
-  0x8,  0x9,  0xA,  0xB,
-  0xC,  0xD,  0xE,  0xF,
-  0x10, 0x11, 0x12, 0x13,
-  0x14, 0x15, 0x16, 0x17,
-  0x18, 0x19, 0x1A, 0x1B,
-  0x1C, 0x1D, 0x1E, 0x1F,
-  0x40, 0x41, 0x44, 0x45,
-  0x48, 0x49, 0x4C, 0x4D,
-  0x50, 0x51, 0x54, 0x55,
-  0x58, 0x59, 0x5C, 0x5D
+// create a queue of CRGB values
+// cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
+CRGB CRGBArr[6] = {CRGB{0, 0, 0}};
+// queue for multicolor effect
+// cppQueue multicolorQueue(sizeof(CRGB), 5, FIFO);
+CRGB multicolorArr[6] = {CRGB{0, 0, 0}};
+unsigned int multicolor_index = 0;
+unsigned int multicolor_count = 0;
+
+// =================================== BUTTON =================================
+
+#define BUTTON_PIN        A3  // 21 -> A3
+
+// debounce
+int lastButtonState = LOW;                  // prev button state
+int buttonState;                            // current button state
+volatile unsigned long buttonPressTime = 0;   // prev debounce time
+unsigned long buttonDebounceDelay = 1000;     // debounce delay for button
+
+// ================================ EEPROM DATA ================================
+
+// EEPROM addresses
+#define RED_ADDR          0
+#define GREEN_ADDR        1
+#define BLUE_ADDR         2
+#define JUMP3_ADDR        3
+#define JUMP7_ADDR        4
+#define PIEZO_THRESH_ADDR 5
+
+// ================================ PIEZO SENSOR ===============================
+
+// piezo pin
+#define PIEZO_PIN     A0
+volatile unsigned int PIEZO_THRESH = 300;
+
+// ================================= MODIFIERS =================================
+
+// custom effect modifiers
+volatile bool ledonrx = false;         // on/flash mode
+volatile bool rainboweffectrx = false; // rainbow effect
+volatile bool jump3 = false;           // rainbow colors
+volatile bool jump7 = false;           // rainbow2 colors
+volatile bool multicolor = false;      // multicolor effect
+bool DIY1 = false;                     // ripple effect
+volatile bool fade3 = false;           // fade off
+volatile bool fade7 = false;           // fade on AND off
+
+// ================================ Trail Effect ===============================
+
+// For trail ripple effect
+const int TRAIL_LENGTH = 15;
+const int TRAIL_MAX = 30;       // Maximum number of simultaneous trails
+
+struct Trail {
+  int position;
+  bool active;
+  CRGB color;
 };
+
+Trail trails[TRAIL_MAX];
+int nextTrailIndex = 0;   // Next available slot for a new trail
+
+// =============================================================================
 
 void setup() {
   // built-in LED
@@ -248,16 +275,34 @@ void check_button() {
         // reset cooldown
         buttonPressTime = millis();
 
-        // check for color queue
-        if (!CRGBQueue.isEmpty()) {
-          CRGB color;
-          CRGBQueue.pop(&color);
+        /// TODO: Optimized, check functionality 
+        // // check for color queue
+        // if (!CRGBQueue.isEmpty()) {
+        //   CRGB color;
+        //   CRGBQueue.pop(&color);
+        //   RED = color.r;
+        //   GREEN = color.g;
+        //   BLUE = color.b;
+        //   onLED();
+        // }
+        
+        // Check CRGB array
+        if (!(CRGBArr[0] == CRGB{0, 0, 0})) {
+          // Serial.println("CRGB array is not empty");
+          CRGB color = CRGBArr[0];
           RED = color.r;
           GREEN = color.g;
           BLUE = color.b;
           onLED();
+          // "pop" from the array
+          for (int i = 0; i < sizeof(CRGBArr) / sizeof(CRGBArr[0]) - 1; i++) {
+            CRGBArr[i] = CRGBArr[i + 1];
+          }
         }
+
+        ///
       }
+      
 
     }
   }
@@ -271,25 +316,20 @@ void check_button() {
  * @param hex_code the hex code to check if it is a known IR signal
  * @return true if the hex code is a known IR signal, false otherwise
  */
-bool isKnownCode(uint32_t hex_code) {
-  // find using binary search (O(log n) for the win)
-  int low = 0;
-  int high = sizeof(known_hex_codes) / sizeof(known_hex_codes[0]) - 1;
+bool isKnownCode(uint8_t hex_code) {
+  uint8_t low = 0, high = CODE_COUNT - 1;
 
   while (low <= high) {
-    int mid = (low + high) / 2;
-    if (hex_code == known_hex_codes[mid]) {
-      return true;
-    } else if (hex_code < known_hex_codes[mid]) {
-      high = mid - 1;
-    } else {
-      low = mid + 1;
-    }
+      uint8_t mid = low + (high - low) / 2;
+      uint8_t mid_value = pgm_read_byte(&known_hex_codes[mid]);  // Read from Flash
+
+      if (hex_code == mid_value) return true;
+      (hex_code < mid_value) ? high = mid - 1 : low = mid + 1;
   }
 
-  // not found
   return false;
 }
+
 
 /**
  * @brief Processes the IR state
@@ -398,45 +438,6 @@ void eeprom_save(int red, int green, int blue) {
 }
 
 /**
- * @brief Pushes RGB color to queue
- * 
- * This function will push the RGB color to the queue.
- * 
- * @param red, green, blue the RGB colors to be pushed to the queue
- * @return N/A
- */
-void pushback(cppQueue& q, int red, int green, int blue) {
-  // save CRGB value to stack
-  CRGB color = CRGB(red, green, blue);
-
-  q.push(&color);
-  // // DEBUG print stack size
-  // Serial.println("Queue size: " + String(q.getCount()));
-  // // print stack values
-  // for (int i = 0; i < q.getCount(); i++) {
-  //   CRGB color;
-  //   q.peekIdx(&color, i);
-  //   Serial.println("Queue value: " + String(color.r) + ", " + String(color.g) + ", " + String(color.b));
-  // }
-
-  // show contents of queue
-  for (int i = 0; i < 3; i ++) {
-    // queue size LEDs should flash the color based on the queue
-    for (int j = 0; j < q.getCount(); j++) {
-      CRGB color;
-      q.peekIdx(&color, j);
-      led[j] = color;
-    }
-    FastLED.show();
-    delay(200);
-
-    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-    FastLED.show();
-    delay(200);
-  }
-}
-
-/**
  * @brief Checks for analog input from the piezoelectric sensor and flashes LED strip
  * 
  * This function will be called on loop checking for input from the piezoelectric sensor.
@@ -449,12 +450,20 @@ void piezo_trigger() {
       // multicolor effect
       if (multicolor) {
         CRGB color;
+
+        // // rotate between selected colors
+        // multicolorQueue.pop(&color);
+        // RED = color.r;
+        // GREEN = color.g;
+        // BLUE = color.b;
+        // multicolorQueue.push(&color);
+
         // rotate between selected colors
-        multicolorQueue.pop(&color);
+        color = multicolorArr[multicolor_index];
         RED = color.r;
         GREEN = color.g;
         BLUE = color.b;
-        multicolorQueue.push(&color);
+        multicolor_index = (multicolor_index + 1) % (multicolor_count);
       }
 
       // Serial.println("Piezo triggered");
@@ -476,8 +485,8 @@ void piezo_trigger() {
 void onLED() {
   // built-in LED
   digitalWrite(LED_RED, RED);
-  digitalWrite(LED_GREEN, GREEN);
-  digitalWrite(LED_BLUE, BLUE);
+  digitalWrite(LED_GREEN, BLUE);   // Swap for LED using GBR order
+  digitalWrite(LED_BLUE, GREEN);
 }
 
 /**
@@ -607,6 +616,280 @@ void toggleOnOff() {
 }
 
 /**
+ * @brief Sets the values for RED, GREEN, BLUE
+ * 
+ * This function will set the values for RED, GREEN, BLUE to the CRGB color according
+ *  to the input color.
+ * 
+ * @param color the CRGB color to set the values for RED, GREEN, BLUE
+ * @return N/A
+ */
+void setColor(CRGB color) {
+  // set new RGB values, constrain to max intensity value
+  RED = scale8(color.r, MAX_INTENSITY);
+  GREEN = scale8(color.g, MAX_INTENSITY);
+  BLUE = scale8(color.b, MAX_INTENSITY);
+}
+
+/**
+ * @brief Adjusts the color value
+ * 
+ * This function will adjust the color value based on the scale factor provided.
+ * 
+ * @param color the color value to adjust
+ * @param scale the scale factor to adjust the color value
+ * 
+ * @return N/A
+ */
+void adj_color(uint8_t& color, int scale) {
+  // Adjust color value
+  int newColor = color + scale;
+
+  // Constrain new color value to be within 1 and MAX_INTENSITY
+  newColor = constrain(newColor, 0, MAX_INTENSITY);
+
+  // Set the adjusted color value
+  color = newColor;
+
+  // Debug
+  // Serial.println("Adjusted color: " + String(color));
+  // Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
+}
+
+CRGB getColor() {
+  if (jump3) {
+    return rainbowColors[(color_index++) % sizeof(rainbowColors)];
+  } else if (jump7) {
+    return rainbowColors2[(color_index++) % sizeof(rainbowColors2)];
+  } else {
+    return CRGB(RED, GREEN, BLUE);
+  }
+}
+
+/**
+ * @brief Creates a ripple effect on impact
+ * 
+ * This function will create a ripple effect on the ARGB LED strip each time the
+ *  piezo sensor is hit.
+ * 
+ * TODO: Find way to end ripple effect or change color during effect.
+ * 
+ * @return N/A
+ */
+void ripple() {
+    IrReceiver.resume(); // Ensure the receiver is cleared before starting
+    unsigned long lastUpdateTime = 0;
+
+    while (true) {
+        // // Check for IR signals
+        // if (IrReceiver.decode()) {
+        //     auto input = IrReceiver.decodedIRData.command;
+
+        //     if (isKnownCode(input)) {
+        //         Serial.println("IR signal received: 0x" + String(input, HEX));
+        //         IrReceiver.resume();
+        //         return; // Exit the ripple function
+        //     } else {
+        //         Serial.println("Invalid signal received: 0x" + String(input, HEX));
+        //         IrReceiver.printIRResultRawFormatted(&Serial);
+        //         IrReceiver.resume();
+        //     }
+        // }
+
+        // Limit how frequently LEDs update
+        if (millis() - lastUpdateTime > 10) { // 10 ms per update
+            lastUpdateTime = millis();
+
+            // Read the piezo value
+            int piezoValue = analogRead(PIEZO_PIN);
+
+            if (piezoValue > PIEZO_THRESH) {
+                // Add a new trail if there is room
+                for (int i = 0; i < TRAIL_MAX; i++) {
+                    if (!trails[i].active) {
+                        trails[i].position = 0;
+                        trails[i].active = true;
+                        trails[i].color = getColor();
+                        break;
+                    }
+                }
+            }
+
+            // Clear and update LED trails
+            fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+
+            for (int t = 0; t < TRAIL_MAX; t++) {
+                if (trails[t].active) {
+                    for (int j = 0; j < TRAIL_LENGTH; j++) {
+                        int pos = trails[t].position - j;
+                        if (pos >= 0 && pos < NUM_LEDS) {
+                            led[pos] = trails[t].color;
+                        }
+                    }
+
+                    trails[t].position++;
+                    if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH) {
+                        trails[t].active = false;
+                    }
+                }
+            }
+
+            FastLED.show(); // Update LEDs
+        }
+
+        delayMicroseconds(100); // Small delay to prevent overloading
+    }
+}
+
+
+/**
+ * @brief Creates a rainbow effect
+ * 
+ * This function will create a rainbow effect on the ARGB LED strip.
+ * 
+ * NOTE: This function will run indefinitely. Device must be powered off to reset.
+ * 
+ * @return N/A
+ */
+void rainbow_effect() {
+  static unsigned long previousMillis = 0; // Static to retain value between calls
+  static const int interval = 20; // Interval for color update
+  IrReceiver.resume(); // Ready to receive IR signals
+
+  while (true) {
+    // Only check the time and update colors at the specified interval
+    if (millis() - previousMillis >= interval) {
+      previousMillis += interval;
+
+      // Calculate hue based on time
+      for (int i = 0; i < NUM_LEDS; i++) {
+        led[i] = CHSV((i * 256 / NUM_LEDS) + (previousMillis / 10) % 256, 255, 255);  // Update color based on time
+      }
+      FastLED.show();
+
+      // Check for IR input
+      if (IrReceiver.available() && IrReceiver.decode()) {
+        auto input = IrReceiver.decodedIRData.command;
+        
+        if (isKnownCode(input)) {
+          offARGB();  // Turn off LEDs if the signal is valid
+          return;     // Exit rainbow effect
+        }
+        // No need to re-enable the IR receiver if the input is invalid
+        IrReceiver.resume();  // Prepare for the next IR signal
+      }
+    }
+  }
+}
+
+
+/**
+ * @brief Pushes RGB color to queue
+ * 
+ * This function will push the RGB color to the queue.
+ * 
+ * @param red, green, blue the RGB colors to be pushed to the queue
+ * @return N/A
+ */
+void pushback(CRGB arr[], int red, int green, int blue) {
+  // Save CRGB value to stack
+  CRGB color = CRGB(red, green, blue);
+  size_t size = 6;
+
+  // Set next non-zero index to color
+  for (int i = 0; i < size; i++) {
+      if (arr[i] == CRGB{0, 0, 0}) {
+          arr[i] = color;
+          multicolor_count++;
+          break; // Exit loop after adding the color
+      }
+  }
+
+  // Show contents of array
+  for (int i = 0; i < 3; i++) { // Flash colors three times
+      for (int j = 0; j < size; j++) {
+          led[j] = arr[j]; // Set LED colors based on array
+      }
+      FastLED.show();
+      delay(200);
+
+      fill_solid(led, NUM_LEDS, CRGB(0, 0, 0)); // Turn off all LEDs
+      FastLED.show();
+      delay(200);
+  }
+}
+
+/**
+ * @brief Visualizes the color queue
+ * 
+ * This function will flash the LED strip to show the colors in the queue.
+ * 
+ * @return N/A
+ */
+void check_colorQueue(CRGB arr[]) {
+
+  unsigned int size = 6;
+
+  if (arr[0] == CRGB{0, 0, 0}) {
+    for (int i = 0; i <= MAX_INTENSITY; i += 5) {
+      analogWrite(LED_RED, 255 * i / MAX_INTENSITY);
+      analogWrite(LED_GREEN, 0 * i / MAX_INTENSITY);
+      analogWrite(LED_BLUE, 0 * i / MAX_INTENSITY);
+      delay(10);  // Gradual on
+    }
+    for (int i = MAX_INTENSITY; i >= 0; i -= 5) {
+      analogWrite(LED_RED, 255 * i / MAX_INTENSITY);
+      analogWrite(LED_GREEN, 0 * i / MAX_INTENSITY);
+      analogWrite(LED_BLUE, 0 * i / MAX_INTENSITY);
+      delay(10);  // Gradual off
+    }
+    return;
+  }
+
+  // Show contents of array
+  for (int i = 0; i < 3; i++) { // Flash colors three times
+    for (int j = 0; j < size; j++) {
+        led[j] = arr[j]; // Set LED colors based on array
+    }
+    FastLED.show();
+    delay(1000);
+
+    fill_solid(led, NUM_LEDS, CRGB(0, 0, 0)); // Turn off all LEDs
+    FastLED.show();
+  }
+}
+
+/**
+ * @brief Flashes the LED strip to confirm a save
+ * 
+ * This function will flash the LED strip to confirm a save to EEPROM.
+ * 
+ * @return N/A
+ */
+void flashConfirm(int val) {
+  for (int i = 0; i < val; i ++) {
+    // offLED();
+    // delay(150);
+
+    // onLED();
+    // delay(150);
+
+    for (int i = MAX_INTENSITY; i >= 0; i -= 5) {
+      analogWrite(LED_RED, RED * i / MAX_INTENSITY);
+      analogWrite(LED_GREEN, BLUE * i / MAX_INTENSITY);
+      analogWrite(LED_BLUE, GREEN * i / MAX_INTENSITY);
+      delay(4);  // Gradual off
+    }
+    for (int i = 0; i <= MAX_INTENSITY; i += 5) {
+      analogWrite(LED_RED, RED * i / MAX_INTENSITY);
+      analogWrite(LED_GREEN, BLUE * i / MAX_INTENSITY);
+      analogWrite(LED_BLUE, GREEN * i / MAX_INTENSITY);
+      delay(4);  // Gradual on
+    }
+  }
+}
+
+/**
  * @brief Process IR hex code
  * 
  * This function will process the IR hex code recieved from the IR remote, setting
@@ -622,7 +905,7 @@ int processHexCode(int IRvalue) {
   switch(IRvalue) {
     // ==================== row 1 - Brightness UP/DOWN, play/pause, power ==========
 
-    // increase brightness
+    // increase delay (slower flash)
     case 0x5C:
       // FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
       DELAY_THRESHOLD += 10;
@@ -632,7 +915,7 @@ int processHexCode(int IRvalue) {
         flashConfirm(2);
       }
       break;
-    // decrease brightness
+    // decrease delay (quicker flash)
     case 0x5D:
       // FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
       DELAY_THRESHOLD -= 10;
@@ -810,13 +1093,15 @@ int processHexCode(int IRvalue) {
     case 0xD:
     {
       // custom multicolor
-      pushback(multicolorQueue, RED, GREEN, BLUE);
+      // pushback(multicolorQueue, RED, GREEN, BLUE);
+      pushback(multicolorArr, RED, GREEN, BLUE);
       break;
     }
     //DIY3
     case 0xE:
       // add to color queue
-      pushback(CRGBQueue, RED, GREEN, BLUE);
+      // pushback(CRGBQueue, RED, GREEN, BLUE);
+      pushback(CRGBArr, RED, GREEN, BLUE);
       // // check current color queue
       // check_colorQueue();
       break;
@@ -837,13 +1122,15 @@ int processHexCode(int IRvalue) {
     case 0x9:
       multicolor = !multicolor;
       if (multicolor) {
-        check_colorQueue(multicolorQueue);
+        // check_colorQueue(multicolorQueue);
+        check_colorQueue(multicolorArr);
       }
       break;
     // DIY6
     case 0xA:
       // check current color queue
-      check_colorQueue(CRGBQueue);
+      // check_colorQueue(CRGBQueue);
+      check_colorQueue(CRGBArr);
       break;
     // FLASH
     case 0xB:
@@ -888,291 +1175,3 @@ int processHexCode(int IRvalue) {
   FastLED.show();
   return IRvalue;
 }
-
-/**
- * @brief Sets the values for RED, GREEN, BLUE
- * 
- * This function will set the values for RED, GREEN, BLUE to the CRGB color according
- *  to the input color.
- * 
- * @param color the CRGB color to set the values for RED, GREEN, BLUE
- * @return N/A
- */
-void setColor(CRGB color) {
-  // set new RGB values, constrain to max intensity value
-  RED = scale8(color.r, MAX_INTENSITY);
-  GREEN = scale8(color.g, MAX_INTENSITY);
-  BLUE = scale8(color.b, MAX_INTENSITY);
-}
-
-/**
- * @brief Adjusts the color value
- * 
- * This function will adjust the color value based on the scale factor provided.
- * 
- * @param color the color value to adjust
- * @param scale the scale factor to adjust the color value
- * 
- * @return N/A
- */
-void adj_color(uint8_t& color, int scale) {
-  // Adjust color value
-  int newColor = color + scale;
-
-  // Constrain new color value to be within 1 and MAX_INTENSITY
-  newColor = constrain(newColor, 0, MAX_INTENSITY);
-
-  // Set the adjusted color value
-  color = newColor;
-
-  // Debug
-  // Serial.println("Adjusted color: " + String(color));
-  // Serial.println("Colors: " + String(RED) + ", " + String(GREEN) + ", " + String(BLUE));
-}
-
-CRGB getColor() {
-  if (jump3) {
-    return rainbowColors[(color_index++) % sizeof(rainbowColors)];
-  } else if (jump7) {
-    return rainbowColors2[(color_index++) % sizeof(rainbowColors2)];
-  } else {
-    return CRGB(RED, GREEN, BLUE);
-  }
-}
-
-/**
- * @brief Creates a ripple effect on impact
- * 
- * This function will create a ripple effect on the ARGB LED strip each time the
- *  piezo sensor is hit.
- * 
- * TODO: Find way to end ripple effect or change color during effect.
- * 
- * @return N/A
- */
-void ripple() {
-    IrReceiver.resume(); // Ensure the receiver is cleared before starting
-    unsigned long lastUpdateTime = 0;
-
-    while (true) {
-        // // Check for IR signals
-        // if (IrReceiver.decode()) {
-        //     auto input = IrReceiver.decodedIRData.command;
-
-        //     if (isKnownCode(input)) {
-        //         Serial.println("IR signal received: 0x" + String(input, HEX));
-        //         IrReceiver.resume();
-        //         return; // Exit the ripple function
-        //     } else {
-        //         Serial.println("Invalid signal received: 0x" + String(input, HEX));
-        //         IrReceiver.printIRResultRawFormatted(&Serial);
-        //         IrReceiver.resume();
-        //     }
-        // }
-
-        // Limit how frequently LEDs update
-        if (millis() - lastUpdateTime > 10) { // 10 ms per update
-            lastUpdateTime = millis();
-
-            // Read the piezo value
-            int piezoValue = analogRead(PIEZO_PIN);
-
-            if (piezoValue > PIEZO_THRESH) {
-                // Add a new trail if there is room
-                for (int i = 0; i < TRAIL_MAX; i++) {
-                    if (!trails[i].active) {
-                        trails[i].position = 0;
-                        trails[i].active = true;
-                        trails[i].color = getColor();
-                        break;
-                    }
-                }
-            }
-
-            // Clear and update LED trails
-            fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-
-            for (int t = 0; t < TRAIL_MAX; t++) {
-                if (trails[t].active) {
-                    for (int j = 0; j < TRAIL_LENGTH; j++) {
-                        int pos = trails[t].position - j;
-                        if (pos >= 0 && pos < NUM_LEDS) {
-                            led[pos] = trails[t].color;
-                        }
-                    }
-
-                    trails[t].position++;
-                    if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH) {
-                        trails[t].active = false;
-                    }
-                }
-            }
-
-            FastLED.show(); // Update LEDs
-        }
-
-        delayMicroseconds(100); // Small delay to prevent overloading
-    }
-}
-
-
-/**
- * @brief Creates a rainbow effect
- * 
- * This function will create a rainbow effect on the ARGB LED strip.
- * 
- * NOTE: This function will run indefinitely. Device must be powered off to reset.
- * 
- * @return N/A
- */
-unsigned long previousMillis = 0;
-const long interval = 25;  // Adjust as needed for smoothness
-
-void rainbow_effect() {
-  bool flag = true;
-  IrReceiver.resume(); // Ready to receive IR signals
-
-  while (flag) {
-    unsigned long currentMillis = millis();
-    
-    // Update LED colors only if the interval has passed
-    if (currentMillis - previousMillis >= interval) {
-      previousMillis = currentMillis;
-      
-      for (int j = 0; j < 255; j++) {
-        for (int i = 0; i < NUM_LEDS; i++) {
-          led[i] = CHSV(i - (j * 2), 255, 255);  // Update color
-        }
-        FastLED.show();
-      }
-
-      // Check for IR input
-      if (IrReceiver.available() && IrReceiver.decode()) {
-        auto input = IrReceiver.decodedIRData.command;
-        
-        if (isKnownCode(input)) {
-          Serial.println("IR signal received: 0x" + String(IrReceiver.decodedIRData.command, HEX));
-          offARGB();  // Turn off LEDs if the signal is valid
-          return;     // Exit rainbow effect
-        } else {
-          Serial.println("INVALID signal received: 0x" + String(IrReceiver.decodedIRData.decodedRawData, HEX));
-          irrecv.enableIRIn();  // Re-enable IR receiver
-        }
-        
-        IrReceiver.resume();  // Prepare for the next IR signal
-      }
-    }
-  }
-}
-
-
-/**
- * @brief Visualizes the color queue
- * 
- * This function will flash the LED strip to show the colors in the queue.
- * 
- * @return N/A
- */
-void check_colorQueue(cppQueue& q) {
-  // queue size LEDs should flash the color based on the queue
-  for (int j = 0; j < q.getCount(); j++) {
-    CRGB color;
-    q.peekIdx(&color, j);
-    led[j] = color;
-  }
-  FastLED.show();
-  delay(1000);
-
-  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-  FastLED.show();
-}
-
-/**
- * @brief Flashes the LED strip to confirm a save
- * 
- * This function will flash the LED strip to confirm a save to EEPROM.
- * 
- * @return N/A
- */
-void flashConfirm(int val) {
-  for (int i = 0; i < val; i ++) {
-    // // LED strip indicator
-    // led[0] = CRGB(RED, GREEN, BLUE);
-    // FastLED.show();
-
-    offLED();
-    delay(200);
-
-    // // LED strip indicator
-    // fill_solid(led, NUM_LEDS, CRGB::Black);
-    // FastLED.show();
-
-    onLED();
-    delay(200);
-  }
-}
-
-/**
-  * @brief Sets the first 10 of the led[] array for visual based on the current sensitivity value
-  * 
-  * This function will show the sensitivity value on the LED strip.
-  * 
-  * @param val the current sensitivy value based on PIEZO_THRESH
-  * @return N/A
-  */
-
-void showSensitivity(uint16_t val) {
-  // Print current sensitivity value for debugging
-  // Serial.print("Sensitivity Value: ");
-  // Serial.println(val);
-
-  // Clear the first 10 LEDs
-  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-
-  // Calculate how many LEDs to light fully based on sensitivity
-  int numLEDsToLight = map(val, 1023, 0, 0, 10);
-  numLEDsToLight = constrain(numLEDsToLight, 0, 10); // Ensure it stays within bounds
-
-  // Print the number of LEDs to light for debugging
-  // Serial.print("Number of LEDs to Light: ");
-  // Serial.println(numLEDsToLight);
-
-  // Determine brightness levels for fully lit LEDs
-  for (int i = 0; i < numLEDsToLight; i++) {
-    led[i] = CRGB(255, 0, 0); // Set fully lit LEDs to RED
-  }
-
-  // If the sensitivity value falls between two LEDs, fade the final lit LED
-  if (numLEDsToLight < 10) {
-    // Calculate brightness for the last partially lit LED
-    int ledBrightness = map(val, (numLEDsToLight * 102), ((numLEDsToLight + 1) * 102), 255, 0);
-    led[numLEDsToLight] = CRGB(ledBrightness, 0, 0); // Set the next LED with dimmed brightness
-  }
-
-  // Update the LED strip to reflect the changes
-  FastLED.show();
-  delay(300);
-}
-
-// /**
-//  * @brief Flashes the LED strip to indicate an error
-//  * 
-//  * This function will flash the LED strip to indicate an error based on the error code.
-//  * 
-//  * @param errorcode the error code to flash the LED strip (number of flashes)
-//  * @return N/A
-//  */
-// void flashError(int errorcode) {
-//   /*
-//   * Flash error codes based on specific error.
-//   * 1: Invalid IR remote value recieved
-//   * 2: Unknown protocol from IR
-//   */
-//   for (int i = 0; i < errorcode; i++) {
-//     led[0] = CRGB(MAX_INTENSITY, 0, 0);
-//     FastLED.show();
-//     delay(50);
-//     led[0] = CRGB(0, 0, 0);
-//     FastLED.show();
-//   }
-// }
