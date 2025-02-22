@@ -330,7 +330,6 @@ bool isKnownCode(uint8_t hex_code) {
   return false;
 }
 
-
 /**
  * @brief Processes the IR state
  * 
@@ -428,13 +427,13 @@ void eeprom_read() {
 void eeprom_save(int red, int green, int blue) {
   // write to EEPROM
   if (!jump3 && !jump7) {
-    EEPROM.write(RED_ADDR, red);
-    EEPROM.write(GREEN_ADDR, green);
-    EEPROM.write(BLUE_ADDR, blue);
+    if (EEPROM.read(RED_ADDR) != red) EEPROM.write(RED_ADDR, red);
+    if (EEPROM.read(GREEN_ADDR) != green) EEPROM.write(GREEN_ADDR, green);
+    if (EEPROM.read(BLUE_ADDR) != blue) EEPROM.write(BLUE_ADDR, blue);
   }
-  EEPROM.write(JUMP3_ADDR, jump3);
-  EEPROM.write(JUMP7_ADDR, jump7);  
-  EEPROM.write(PIEZO_THRESH_ADDR, PIEZO_THRESH);
+  if (EEPROM.read(JUMP3_ADDR) != jump3) EEPROM.write(JUMP3_ADDR, jump3);
+  if (EEPROM.read(JUMP7_ADDR) != jump7) EEPROM.write(JUMP7_ADDR, jump7);
+  if (EEPROM.read(PIEZO_THRESH_ADDR) != PIEZO_THRESH) EEPROM.write(PIEZO_THRESH_ADDR, PIEZO_THRESH);
 }
 
 /**
@@ -681,63 +680,58 @@ void ripple() {
     unsigned long lastUpdateTime = 0;
 
     while (true) {
-        // // Check for IR signals
-        // if (IrReceiver.decode()) {
-        //     auto input = IrReceiver.decodedIRData.command;
-
-        //     if (isKnownCode(input)) {
-        //         Serial.println("IR signal received: 0x" + String(input, HEX));
-        //         IrReceiver.resume();
-        //         return; // Exit the ripple function
-        //     } else {
-        //         Serial.println("Invalid signal received: 0x" + String(input, HEX));
-        //         IrReceiver.printIRResultRawFormatted(&Serial);
-        //         IrReceiver.resume();
-        //     }
-        // }
-
-        // Limit how frequently LEDs update
-        if (millis() - lastUpdateTime > 10) { // 10 ms per update
-            lastUpdateTime = millis();
-
-            // Read the piezo value
-            int piezoValue = analogRead(PIEZO_PIN);
-
-            if (piezoValue > PIEZO_THRESH) {
-                // Add a new trail if there is room
-                for (int i = 0; i < TRAIL_MAX; i++) {
-                    if (!trails[i].active) {
-                        trails[i].position = 0;
-                        trails[i].active = true;
-                        trails[i].color = getColor();
-                        break;
-                    }
-                }
-            }
-
-            // Clear and update LED trails
-            fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-
-            for (int t = 0; t < TRAIL_MAX; t++) {
-                if (trails[t].active) {
-                    for (int j = 0; j < TRAIL_LENGTH; j++) {
-                        int pos = trails[t].position - j;
-                        if (pos >= 0 && pos < NUM_LEDS) {
-                            led[pos] = trails[t].color;
-                        }
-                    }
-
-                    trails[t].position++;
-                    if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH) {
-                        trails[t].active = false;
-                    }
-                }
-            }
-
-            FastLED.show(); // Update LEDs
+      // Check for IR signal and exit if a valid one is received
+      if (IrReceiver.decode()) {
+        uint16_t input = IrReceiver.decodedIRData.command;
+        if (isKnownCode(input)) {
+            offARGB();  // Turn off LEDs when exiting
+            return;     // Exit ripple effect
         }
+        IrReceiver.resume();  // Continue listening for IR input
+      }
 
-        delayMicroseconds(100); // Small delay to prevent overloading
+      // Limit how frequently LEDs update
+      if (millis() - lastUpdateTime > 10) { // 10 ms per update
+          lastUpdateTime = millis();
+
+          // Read the piezo value
+          int piezoValue = analogRead(PIEZO_PIN);
+
+          if (piezoValue > PIEZO_THRESH) {
+              // Add a new trail if there is room
+              for (int i = 0; i < TRAIL_MAX; i++) {
+                  if (!trails[i].active) {
+                      trails[i].position = 0;
+                      trails[i].active = true;
+                      trails[i].color = getColor();
+                      break;
+                  }
+              }
+          }
+
+          // Clear and update LED trails
+          fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+
+          for (int t = 0; t < TRAIL_MAX; t++) {
+              if (trails[t].active) {
+                  for (int j = 0; j < TRAIL_LENGTH; j++) {
+                      int pos = trails[t].position - j;
+                      if (pos >= 0 && pos < NUM_LEDS) {
+                          led[pos] = trails[t].color;
+                      }
+                  }
+
+                  trails[t].position++;
+                  if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH) {
+                      trails[t].active = false;
+                  }
+              }
+          }
+
+          FastLED.show(); // Update LEDs
+      }
+
+      delayMicroseconds(100); // Small delay to prevent overloading
     }
 }
 
@@ -932,16 +926,19 @@ int processHexCode(int IRvalue) {
       break;
     // PWR
     case 0x40:
-      // if (!modifier) {
-      //   modifier = true;    // trigger alt modifier for next input
-      //   led[0] = CRGB(0, 0, MAX_INTENSITY);
-      //   FastLED.show();
-      //   Serial.println("Modifier ON");
-      //   return;
-      // } else {
-      //   // IrReceiver.disableIRIn();
-      //   // Serial.println("IR disabled");
-      // }
+      // disable IR Receiver
+      irrecv.disableIRIn();
+      // flash RGB LED red
+      for (int i = 0; i < 3; i++) {
+        analogWrite(LED_RED, 255);
+        analogWrite(LED_GREEN, 0);
+        analogWrite(LED_BLUE, 0);
+        delay(200);
+        analogWrite(LED_RED, RED);
+        analogWrite(LED_GREEN, BLUE);
+        analogWrite(LED_BLUE, GREEN);
+        delay(200);
+      }
       break;
 
     // ==================== row 2 | Color ==========================================
@@ -1029,23 +1026,12 @@ int processHexCode(int IRvalue) {
     // QUICK | Sensitivity down
     case 0x17:
     {
-      // if (!modifier) {
-        // increase sensitivity
-        PIEZO_THRESH -= 10;
-        if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
-          PIEZO_THRESH = 10;
-          // indicate max sensitivity reached
-          flashConfirm(2);
-        }
-        // Serial.println("Sensitivity: " + String(PIEZO_THRESH));
-        // showSensitivity(PIEZO_THRESH);
-      // } else {
-      //   modifier = false;
-      //   // decrease delay (quicker flash)
-      //   DELAY_THRESHOLD -= 50;
-      //   led[0] = CRGB(0, 0, 0);
-      //   FastLED.show();
-      // }
+      PIEZO_THRESH -= 10;
+      if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
+        PIEZO_THRESH = 10;
+        // indicate max sensitivity reached
+        flashConfirm(2);
+      }
       break;
     }
     // ==================== row 8 | RED/BLUE/GREEN decrease, SLOW ====================
@@ -1076,18 +1062,8 @@ int processHexCode(int IRvalue) {
     // DIY1
     case 0xC:
     {
-      // loop until IR signal is received
-      // while (true) {
-        ripple();
-      //   // continue checking for valid IR signal
-      //   if (IrReceiver.decode()) {
-      //     if (processHexCode(IrReceiver.decodedIRData.command) != -1) {
-      //       break;
-      //     }
-      //     IrReceiver.resume();    // resume IR input
-      //   }
-      // }
-      break;
+      ripple();
+      return;
     }
     // DIY2
     case 0xD:
