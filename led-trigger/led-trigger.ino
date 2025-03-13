@@ -69,7 +69,7 @@ const uint8_t known_hex_codes[] PROGMEM = {
 // =============================== ARGB LED Strip ==============================
 
 // ARGB pin
-#define NUM_LEDS      150    // maximum number of LEDs in one given strip (170)
+#define NUM_LEDS      140    // maximum number of LEDs in one given strip (170)
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
@@ -373,20 +373,21 @@ bool validate_IR(IRrecv IrReceiver) {
         // IrReceiver.printIRResultRawFormatted(&Serial, true);
         IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
         return false;
-      } else {
+      } else 
+      if (IrReceiver.decodedIRData.protocol == NEC) {
         // IrReceiver.printIRResultShort(&Serial);
         // IrReceiver.printIRSendUsage(&Serial);
 
-        if (!isKnownCode(IrReceiver.decodedIRData.command)) {
-          IrReceiver.resume();
-          return false;
-        } else {
+        if (isKnownCode(IrReceiver.decodedIRData.command)) {
           // process IR signal
           // Serial.println("IR signal recieved: " + String(IrReceiver.decodedIRData.command));
           processHexCode(IrReceiver.decodedIRData.command);
+        } else {
+          IrReceiver.resume();
+          return false;
         }
 
-        IrReceiver.resume(); // Move this to after processing code to prevent multiple inputs
+        IrReceiver.resume(); 
         // update IR signal time
         lastIRTime = currentMillis;
         return true;
@@ -681,6 +682,7 @@ void ripple() {
 
     while (true) {
       // Check for IR signal and exit if a valid one is received
+      /// TODO: Accomidate for if (IrReceiver.decodedIRData.protocol == NEC)
       if (IrReceiver.decode()) {
         uint16_t input = IrReceiver.decodedIRData.command;
         if (isKnownCode(input)) {
@@ -735,7 +737,6 @@ void ripple() {
     }
 }
 
-
 /**
  * @brief Creates a rainbow effect
  * 
@@ -747,33 +748,31 @@ void ripple() {
  */
 void rainbow_effect() {
   static unsigned long previousMillis = 0; // Static to retain value between calls
-  static const int interval = 20; // Interval for color update
+  const int interval = 20; // Interval for color update
+
   IrReceiver.resume(); // Ready to receive IR signals
 
-  while (true) {
-    // Only check the time and update colors at the specified interval
-    if (millis() - previousMillis >= interval) {
+  bool flag = false;
+
+  while (!flag) {
+    unsigned long currentMillis = millis();
+
+    // Update colors at the specified interval
+    if (currentMillis - previousMillis >= interval) {
       previousMillis += interval;
 
-      // Calculate hue based on time
+      // Calculate and update LED colors
       for (int i = 0; i < NUM_LEDS; i++) {
-        led[i] = CHSV((i * 256 / NUM_LEDS) + (previousMillis / 10) % 256, 255, 255);  // Update color based on time
+        led[i] = CHSV((i * 256 / NUM_LEDS) + (previousMillis / 10) % 256, 255, 255);
       }
       FastLED.show();
-
-      // Check for IR input
-      if (IrReceiver.available() && IrReceiver.decode()) {
-        auto input = IrReceiver.decodedIRData.command;
-        
-        if (isKnownCode(input)) {
-          offARGB();  // Turn off LEDs if the signal is valid
-          return;     // Exit rainbow effect
-        }
-        // No need to re-enable the IR receiver if the input is invalid
-        IrReceiver.resume();  // Prepare for the next IR signal
-      }
     }
+
+    // Check for IR input
+    flag = validate_IR(IrReceiver);
   }
+  offARGB();
+  return;
 }
 
 
