@@ -145,7 +145,7 @@ unsigned long buttonDebounceDelay = 1000;     // debounce delay for button
 
 // piezo pin
 #define PIEZO_PIN     A0
-volatile unsigned int PIEZO_THRESH = 300;
+volatile unsigned int PIEZO_THRESH = 800;
 
 // ================================= MODIFIERS =================================
 
@@ -680,17 +680,26 @@ void ripple() {
     IrReceiver.resume(); // Ensure the receiver is cleared before starting
     unsigned long lastUpdateTime = 0;
 
-    while (true) {
+    bool flag = false;
+
+    while (!flag) {
       // Check for IR signal and exit if a valid one is received
-      /// TODO: Accomidate for if (IrReceiver.decodedIRData.protocol == NEC)
       if (IrReceiver.decode()) {
         uint16_t input = IrReceiver.decodedIRData.command;
         if (isKnownCode(input)) {
             offARGB();  // Turn off LEDs when exiting
+            // processHexCode(input);  // Process the IR signal
+            flag = true;
             return;     // Exit ripple effect
         }
         IrReceiver.resume();  // Continue listening for IR input
       }
+
+      // if (validate_IR(IrReceiver)) {
+      //   flag = true;
+      //   offARGB();
+      //   return;
+      // }
 
       // Limit how frequently LEDs update
       if (millis() - lastUpdateTime > 10) { // 10 ms per update
@@ -747,6 +756,9 @@ void ripple() {
  * @return N/A
  */
 void rainbow_effect() {
+
+  /// TODO: Allow effect ONLY on piezo trigger (saves battery, saves components)
+
   static unsigned long previousMillis = 0; // Static to retain value between calls
   const int interval = 20; // Interval for color update
 
@@ -774,7 +786,6 @@ void rainbow_effect() {
   offARGB();
   return;
 }
-
 
 /**
  * @brief Pushes RGB color to queue
