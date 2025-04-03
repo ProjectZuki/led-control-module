@@ -484,9 +484,9 @@ void piezo_trigger() {
  */
 void onLED() {
   // built-in LED
-  digitalWrite(LED_RED, RED);
-  digitalWrite(LED_GREEN, BLUE);   // Swap for LED using GBR order
-  digitalWrite(LED_BLUE, GREEN);
+    analogWrite(LED_RED, RED / 4);       // 50% brightness
+    analogWrite(LED_GREEN, BLUE / 4);    // Swap for LED using GBR order
+    analogWrite(LED_BLUE, GREEN / 4);    // 50% brightness
 }
 
 /**
@@ -531,6 +531,40 @@ void onARGB() {
 
 }
 
+// // Variable to control the maximum total RGB value (scaled for 3A limit)
+// int maxRGBValue = 75;  // Adjust this value to change the intensity for maintaining 3A limit
+
+// void onARGB() {
+//   // Ensure that the sum of RGB does not exceed maxRGBValue
+//   int totalRGB = RED + GREEN + BLUE;
+
+//   // Scale down if the totalRGB exceeds the maxRGBValue
+//   if (totalRGB > maxRGBValue) {
+//     float scaleFactor = (float)maxRGBValue / totalRGB;
+//     RED = (int)(RED * scaleFactor);
+//     GREEN = (int)(GREEN * scaleFactor);
+//     BLUE = (int)(BLUE * scaleFactor);
+//   }
+
+//   // Perform the actual color change with the adjusted RGB values
+//   if (fade7) {
+//     for (int i = 0; i <= MAX_INTENSITY; i += 5) {
+//       fill_solid(led, NUM_LEDS, CRGB(RED, GREEN, BLUE).fadeLightBy(MAX_INTENSITY - i));
+//       FastLED.show();
+//       delay(1);  // Short delay for quicker fade-in
+
+//       // on trigger reset fade
+//       if (analogRead(PIEZO_PIN) > PIEZO_THRESH) {
+//         i = MAX_INTENSITY / 4;
+//       }
+//     }
+//   } else {
+//     fill_solid(led, NUM_LEDS, jump3 ? rainbowColors[(color_index++) % sizeof(rainbowColors)] : jump7 ? rainbowColors2[(color_index++) % sizeof(rainbowColors2)] : CRGB(RED, GREEN, BLUE));
+//     FastLED.show();
+//   }
+// }
+
+
 /**
  * @brief Turn off LEDs
  * 
@@ -565,8 +599,74 @@ void offARGB() {
  * 
  * @return N/A
  */
+// void toggleOnOff() {
+//   bool ledon = true;
+//   // toggle on/off for play/pause button
+//   onARGB();
+//   IrReceiver.resume();
+//   while (ledon) {
+//     // Serial.println("LED on");
+//     if (IrReceiver.decode()) {
+
+//       unsigned long currentMillis = millis();
+
+//       if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
+
+//         if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
+//           // Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
+//           // We have an unknown protocol here, print extended info
+//           // DEBUG
+//           // IrReceiver.printIRResultRawFormatted(&Serial, true);
+//           // IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
+//           IrReceiver.resume();
+//         } else {
+//           IrReceiver.resume(); // Early enable receiving of the next IR frame
+//           // DEBUG
+//           // IrReceiver.printIRResultShort(&Serial);
+//           // IrReceiver.printIRSendUsage(&Serial);
+
+//           lastIRTime = currentMillis;
+//         }
+//         // Serial.println();
+
+//         if (IrReceiver.decodedIRData.command == 0x41) {
+//           // Serial.println("LED off");
+//           ledon = false;
+//           offARGB();
+//           offLED();
+//           break;
+//         } else {
+//           // apply modifications to color
+//           processHexCode(IrReceiver.decodedIRData.command);
+//         }
+//         // update color in case of change
+//         onARGB();
+//         onLED();
+//         delay(200);  // delay to reduce multiple inputs
+//         IrReceiver.resume();
+//       }
+//     }
+//   }
+// }
+
 void toggleOnOff() {
   bool ledon = true;
+  const int tempRED = RED;
+  const int tempGREEN = GREEN;
+  const int tempBLUE = BLUE;
+  
+  int maxRGBValue = 150;  // Adjust this value to change the intensity for maintaining 3A limit
+  // Ensure that the sum of RGB does not exceed maxRGBValue
+  int totalRGB = RED + GREEN + BLUE;
+
+  // Scale down if the totalRGB exceeds the maxRGBValue
+  if (totalRGB > maxRGBValue) {
+    float scaleFactor = (float)maxRGBValue / totalRGB;
+    RED = (int)(RED * scaleFactor);
+    GREEN = (int)(GREEN * scaleFactor);
+    BLUE = (int)(BLUE * scaleFactor);
+  }
+
   // toggle on/off for play/pause button
   onARGB();
   IrReceiver.resume();
@@ -579,33 +679,35 @@ void toggleOnOff() {
       if ((currentMillis - lastIRTime) >= IRDebounceDelay) {
 
         if (IrReceiver.decodedIRData.protocol == UNKNOWN) {
-          // Serial.println(F("Received noise or an unknown (or not yet enabled) protocol"));
-          // We have an unknown protocol here, print extended info
-          // DEBUG
-          // IrReceiver.printIRResultRawFormatted(&Serial, true);
-          // IrReceiver.resume(); // Do it here, to preserve raw data for printing with printIRResultRawFormatted()
           IrReceiver.resume();
         } else {
           IrReceiver.resume(); // Early enable receiving of the next IR frame
-          // DEBUG
-          // IrReceiver.printIRResultShort(&Serial);
-          // IrReceiver.printIRSendUsage(&Serial);
-
           lastIRTime = currentMillis;
         }
-        // Serial.println();
 
         if (IrReceiver.decodedIRData.command == 0x41) {
-          // Serial.println("LED off");
+          // LED off command
           ledon = false;
           offARGB();
           offLED();
           break;
         } else {
-          // apply modifications to color
+          // Apply modifications to color
           processHexCode(IrReceiver.decodedIRData.command);
+          
+          // Ensure that the sum of RGB does not exceed maxRGBValue
+          totalRGB = RED + GREEN + BLUE;
+
+          // Scale down if the totalRGB exceeds the maxRGBValue
+          if (totalRGB > maxRGBValue) {
+            float scaleFactor = (float)maxRGBValue / totalRGB;
+            RED = (int)(RED * scaleFactor);
+            GREEN = (int)(GREEN * scaleFactor);
+            BLUE = (int)(BLUE * scaleFactor);
+          }
         }
-        // update color in case of change
+
+        // Update color in case of change
         onARGB();
         onLED();
         delay(200);  // delay to reduce multiple inputs
@@ -613,7 +715,13 @@ void toggleOnOff() {
       }
     }
   }
+
+  // replace RGB values
+  RED = tempRED;
+  GREEN = tempGREEN;
+  BLUE = tempBLUE;
 }
+
 
 /**
  * @brief Sets the values for RED, GREEN, BLUE
@@ -684,6 +792,7 @@ void ripple() {
 
     while (!flag) {
       // Check for IR signal and exit if a valid one is received
+      /// TODO: I guess this works???
       if (IrReceiver.decode()) {
         uint16_t input = IrReceiver.decodedIRData.command;
         if (isKnownCode(input)) {
@@ -694,12 +803,6 @@ void ripple() {
         }
         IrReceiver.resume();  // Continue listening for IR input
       }
-
-      // if (validate_IR(IrReceiver)) {
-      //   flag = true;
-      //   offARGB();
-      //   return;
-      // }
 
       // Limit how frequently LEDs update
       if (millis() - lastUpdateTime > 10) { // 10 ms per update
