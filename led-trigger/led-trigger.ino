@@ -69,7 +69,7 @@ const uint8_t known_hex_codes[] PROGMEM = {
 // =============================== ARGB LED Strip ==============================
 
 // ARGB pin
-#define NUM_LEDS      140    // maximum number of LEDs in one given strip (170)
+#define NUM_LEDS      180    // maximum number of LEDs in one given strip (170)
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
