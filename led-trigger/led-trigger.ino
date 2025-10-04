@@ -7,16 +7,16 @@
  *             LED colors based on an RGB IR remote.
  *
  * @author     Willie Alcaraz ([Project]Zuki)
- * @date       August 2024
+ * @date       August 2025
  * 
  * @note       Atmega328p
  *
  * @copyright  
- * © 2024 [Project]Zuki. All rights reserved.
+ * © 2025 [Project]Zuki. All rights reserved.
  * 
  * This project and all files within this repository are proprietary software:
  * you can use it under the terms of the [Project]Zuki License. You may not use
- * this file except in compliance with the License. You may obtain a copy of the
+ * this file except in compliance with the License. You may obtain a cop  y of the
  * License by contacting [Project]Zuki.
  * 
  * This software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
@@ -69,7 +69,7 @@ const uint8_t known_hex_codes[] PROGMEM = {
 // =============================== ARGB LED Strip ==============================
 
 // ARGB pin
-#define NUM_LEDS      180    // maximum number of LEDs in one given strip (170)
+#define NUM_LEDS      170    // maximum number of LEDs in one given strip (confirmed 170 max for Tenors)
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];
