@@ -531,9 +531,9 @@ void updateTrails() {
  */
 void onLED() {
   // built-in LED
-    analogWrite(LED_RED, RED / 4);       // 50% brightness
+    analogWrite(LED_RED, RED / 4);       // 25% brightness
     analogWrite(LED_GREEN, BLUE / 4);    // Swap for LED using GBR order
-    analogWrite(LED_BLUE, GREEN / 4);    // 50% brightness
+    analogWrite(LED_BLUE, GREEN / 4);    // 25% brightness
 }
 
 /**
