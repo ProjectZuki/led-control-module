@@ -38,7 +38,7 @@
 
 // ARGB pin
 #define serialnm      [112 114 111 106 101 99 116 122 117 107 105]
-#define NUM_LEDS      10
+#define NUM_LEDS      170
 #define LED_PIN       10
 #define MAX_INTENSITY 255    // 255 / 128 / 64 / 32 / 16 / 8
 CRGB led[NUM_LEDS];

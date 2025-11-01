@@ -230,11 +230,11 @@ int processHexCode(int IRvalue) {
 
     // increase brightness
     case 0x5C:
-      // FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
+      FastLED.setBrightness(constrain(FastLED.getBrightness() +20, 1, 255));
       break;
     // decrease brightness
     case 0x5D:
-      // FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
+      FastLED.setBrightness(constrain(FastLED.getBrightness() -20, 1, 255));
       break;
     // play/pause
     case 0x41:
