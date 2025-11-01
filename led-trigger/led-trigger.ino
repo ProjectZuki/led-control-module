@@ -301,6 +301,8 @@ void check_button() {
           for (int i = 0; i < sizeof(CRGBArr) / sizeof(CRGBArr[0]) - 1; i++) {
             CRGBArr[i] = CRGBArr[i + 1];
           }
+          /// NOTE: Suggested change from CoPilot, will set last element to blank after pop
+          CRGBArr[sizeof(CRGBArr) / sizeof(CRGBArr[0]) - 1] = CRGB{0, 0, 0};
         }
 
         ///
@@ -995,7 +997,7 @@ void flashConfirm(int val) {
  * This function will process the IR hex code recieved from the IR remote, setting
  *  the appropriate colors for RED, GREEN, BLUE according to the hex code from the IR remote.
  * 
- * @param IRvalue the hex code recieved from the IR remote
+ * @param IRvalue the hex code received from the IR remote
  * @return -1 if the IR hex code is invalid
  */
 int processHexCode(int IRvalue) {
