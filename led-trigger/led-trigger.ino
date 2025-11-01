@@ -29,10 +29,11 @@
  * https://williealcaraz.dev
  *****************************************************************************/
 
+#include <Arduino.h>          // standard Arduino functions
+#include <stdint.h>           // fixed width integer types for compatibility
 #include <IRremote.h>         // IR remote
 #include <FastLED.h>          // NeoPixel ARGB
 #include <EEPROM.h>           // save ROM data durong off state
-#include <Arduino.h>          // standard Arduino functions
 #include <avr/pgmspace.h>     // PROGMEM
 // #include <cppQueue.h>         // queue for RGB color states
 // #include <stdint.h>
@@ -43,8 +44,6 @@
 #define IR_RECEIVER_PIN A4    // 18 -> A4
 
 // IR
-IRrecv irrecv(IR_RECEIVER_PIN);
-decode_results results;
 
 volatile unsigned long lastIRTime = 0;       // prev debounce time
 unsigned long IRDebounceDelay = 500;        // debounce delay for IR
@@ -112,6 +111,9 @@ CRGB rainbowColors2[] = {
   CRGB::Aqua
 };
 
+#define RAINBOW_COUNT (sizeof(rainbowColors) / sizeof(rainbowColors[0]))
+#define RAINBOW2_COUNT (sizeof(rainbowColors2) / sizeof(rainbowColors2[0]))
+
 // create a queue of CRGB values
 // cppQueue CRGBQueue(sizeof(CRGB), 5, FIFO);
 CRGB CRGBArr[6] = {CRGB{0, 0, 0}};
@@ -145,7 +147,7 @@ unsigned long buttonDebounceDelay = 1000;     // debounce delay for button
 
 // piezo pin
 #define PIEZO_PIN     A0
-volatile unsigned int PIEZO_THRESH = 800;
+unsigned int PIEZO_THRESH = 20;
 
 // ================================= MODIFIERS =================================
 
@@ -214,9 +216,8 @@ void setup() {
   delay(500);
 
   // IR
-  // Start the receiver, set default feedback LED
-  // IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
-  irrecv.enableIRIn();  // Old version of IRremote initialization
+  // irrecv.enableIRIn();  // Old version of IRremote initialization
+  IrReceiver.begin(IR_RECEIVER_PIN, ENABLE_LED_FEEDBACK);
 
   // restore color values
   eeprom_read();
@@ -236,7 +237,7 @@ void loop() {
   onLED();
 
   // check for either IR or transmitter data
-  validate_IR(IrReceiver);
+  validate_IR();
 
   if (ledonrx) {
     rainboweffectrx = false;
@@ -248,6 +249,8 @@ void loop() {
 
   // check for piezo sensor input
   piezo_trigger();
+  // update any active non-blocking trails
+  updateTrails();
 }
 
 /**
@@ -350,14 +353,13 @@ bool IRState() {
 /**
  * @brief Validates infrared signal
  * 
- * This function takes an IRrecv object to check for IR input. On input, the hex
- * code retrieved will be validated. On bad input, it will print to serial the exact
- * signal code that was recieved.
- * 
- * @param IrReceiver the IRrecv object reading infrared signals
+ * This function checks the IR receiver (global IrReceiver) for input. On input,
+ * the hex code retrieved will be validated. On bad input, it will print the
+ * signal code to serial.
+ *
  * @return N/A
  */
-bool validate_IR(IRrecv IrReceiver) {
+bool validate_IR() {
   // IR remote instructions
   if (IrReceiver.decode()) {
     // Serial.println("Received IR signal: " + String(IrReceiver.decodedIRData.command, HEX));
@@ -468,10 +470,55 @@ void piezo_trigger() {
 
       // Serial.println("Piezo triggered");
 
-      // Flash LED
-      onARGB();
-      delay(DELAY_THRESHOLD);
-      offARGB();
+      // If DIY1 (ripple mode) is enabled, add a trail instead of blocking flash
+      if (DIY1) {
+        addTrail();
+      } else {
+        // Flash LED
+        onARGB();
+        delay(DELAY_THRESHOLD);
+        offARGB();
+      }
+  }
+}
+
+// Add a new trail starting at position 0 (head of strip)
+void addTrail() {
+  for (int i = 0; i < TRAIL_MAX; i++) {
+    if (!trails[i].active) {
+      trails[i].position = 0;
+      trails[i].active = true;
+      trails[i].color = getColor();
+      return;
+    }
+  }
+}
+
+// Update all active trails and render LEDs. Non-blocking; call frequently from loop().
+void updateTrails() {
+  // Clear LEDs
+  fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
+
+  bool anyActive = false;
+  for (int t = 0; t < TRAIL_MAX; t++) {
+    if (trails[t].active) {
+      anyActive = true;
+      for (int j = 0; j < TRAIL_LENGTH; j++) {
+        int pos = trails[t].position - j;
+        if (pos >= 0 && pos < NUM_LEDS) {
+          led[pos] = trails[t].color;
+        }
+      }
+
+      trails[t].position++;
+      if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH) {
+        trails[t].active = false;
+      }
+    }
+  }
+
+  if (anyActive) {
+    FastLED.show();
   }
 }
 
@@ -513,7 +560,7 @@ void offLED() {
  */
 void onARGB() {
   // do the thing but ARGB
-  if (fade7) {
+    if (fade7) {
     for (int i = 0; i <= MAX_INTENSITY; i += 5) {
       fill_solid(led, NUM_LEDS, CRGB(RED, GREEN, BLUE).fadeLightBy(MAX_INTENSITY - i));
       FastLED.show();
@@ -525,7 +572,13 @@ void onARGB() {
       }
     }
   } else {
-    fill_solid(led, NUM_LEDS, jump3? rainbowColors[(color_index++) % sizeof(rainbowColors)] : jump7? rainbowColors2[(color_index++) % sizeof(rainbowColors2)] : CRGB(RED, GREEN, BLUE));
+    if (jump3) {
+      fill_solid(led, NUM_LEDS, rainbowColors[(color_index++) % RAINBOW_COUNT]);
+    } else if (jump7) {
+      fill_solid(led, NUM_LEDS, rainbowColors2[(color_index++) % RAINBOW2_COUNT]);
+    } else {
+      fill_solid(led, NUM_LEDS, CRGB(RED, GREEN, BLUE));
+    }
     FastLED.show();
   }
 
@@ -785,68 +838,8 @@ CRGB getColor() {
  * @return N/A
  */
 void ripple() {
-    IrReceiver.resume(); // Ensure the receiver is cleared before starting
-    unsigned long lastUpdateTime = 0;
-
-    bool flag = false;
-
-    while (!flag) {
-      // Check for IR signal and exit if a valid one is received
-      /// TODO: I guess this works???
-      if (IrReceiver.decode()) {
-        uint16_t input = IrReceiver.decodedIRData.command;
-        if (isKnownCode(input)) {
-            offARGB();  // Turn off LEDs when exiting
-            // processHexCode(input);  // Process the IR signal
-            flag = true;
-            return;     // Exit ripple effect
-        }
-        IrReceiver.resume();  // Continue listening for IR input
-      }
-
-      // Limit how frequently LEDs update
-      if (millis() - lastUpdateTime > 10) { // 10 ms per update
-          lastUpdateTime = millis();
-
-          // Read the piezo value
-          int piezoValue = analogRead(PIEZO_PIN);
-
-          if (piezoValue > PIEZO_THRESH) {
-              // Add a new trail if there is room
-              for (int i = 0; i < TRAIL_MAX; i++) {
-                  if (!trails[i].active) {
-                      trails[i].position = 0;
-                      trails[i].active = true;
-                      trails[i].color = getColor();
-                      break;
-                  }
-              }
-          }
-
-          // Clear and update LED trails
-          fill_solid(led, NUM_LEDS, CRGB(0, 0, 0));
-
-          for (int t = 0; t < TRAIL_MAX; t++) {
-              if (trails[t].active) {
-                  for (int j = 0; j < TRAIL_LENGTH; j++) {
-                      int pos = trails[t].position - j;
-                      if (pos >= 0 && pos < NUM_LEDS) {
-                          led[pos] = trails[t].color;
-                      }
-                  }
-
-                  trails[t].position++;
-                  if (trails[t].position >= NUM_LEDS + TRAIL_LENGTH) {
-                      trails[t].active = false;
-                  }
-              }
-          }
-
-          FastLED.show(); // Update LEDs
-      }
-
-      delayMicroseconds(100); // Small delay to prevent overloading
-    }
+  // Deprecated blocking ripple kept for reference. Use non-blocking addTrail()/updateTrails().
+  return;
 }
 
 /**
@@ -883,8 +876,8 @@ void rainbow_effect() {
       FastLED.show();
     }
 
-    // Check for IR input
-    flag = validate_IR(IrReceiver);
+      // Check for IR input
+      flag = validate_IR();
   }
   offARGB();
   return;
@@ -1040,7 +1033,7 @@ int processHexCode(int IRvalue) {
     // PWR
     case 0x40:
       // disable IR Receiver
-      irrecv.disableIRIn();
+      IrReceiver.disableIRIn();
       // flash RGB LED red
       for (int i = 0; i < 3; i++) {
         analogWrite(LED_RED, 255);
@@ -1139,9 +1132,9 @@ int processHexCode(int IRvalue) {
     // QUICK | Sensitivity down
     case 0x17:
     {
-      PIEZO_THRESH -= 10;
+      PIEZO_THRESH -= 20;
       if (PIEZO_THRESH <= 0 || PIEZO_THRESH >= 1023) {  // unsigned int < 0 will become 65535
-        PIEZO_THRESH = 10;
+        PIEZO_THRESH = 20;
         // indicate max sensitivity reached
         flashConfirm(2);
       }
@@ -1161,7 +1154,7 @@ int processHexCode(int IRvalue) {
     // SLOW | Sensitivity up
     case 0x13:
     {
-      PIEZO_THRESH += 10;
+      PIEZO_THRESH += 20;
       if (PIEZO_THRESH >= 1023) {
         PIEZO_THRESH = constrain(PIEZO_THRESH, 0, 1023);
         // indicate min sensitivity reached
@@ -1172,10 +1165,11 @@ int processHexCode(int IRvalue) {
     // ==================== row 9 | DIY 1-3, AUTO ====================================
 
 
-    // DIY1
+    // DIY1: toggle non-blocking ripple mode
     case 0xC:
     {
-      ripple();
+      DIY1 = !DIY1;
+      flashConfirm(4);
       return;
     }
     // DIY2
@@ -1184,6 +1178,7 @@ int processHexCode(int IRvalue) {
       // custom multicolor
       // pushback(multicolorQueue, RED, GREEN, BLUE);
       pushback(multicolorArr, RED, GREEN, BLUE);
+      multicolor = true;
       break;
     }
     //DIY3
@@ -1209,11 +1204,10 @@ int processHexCode(int IRvalue) {
       return;
     // DIY5
     case 0x9:
-      multicolor = !multicolor;
-      if (multicolor) {
-        // check_colorQueue(multicolorQueue);
-        check_colorQueue(multicolorArr);
-      }
+      // if (multicolor) {
+      //   // check_colorQueue(multicolorQueue);
+      //   check_colorQueue(multicolorArr);
+      // }
       break;
     // DIY6
     case 0xA:
@@ -1254,6 +1248,12 @@ int processHexCode(int IRvalue) {
       // flashError(2);
       return -1;
   }
+
+  // if (IRvalue != 0xD) {
+  //   // disable multicolor mode if not adding colors
+  //   multicolor = false;
+  //   multicolor_index = 0;
+  // }
 
   jump3 = false;
   jump7 = false;
