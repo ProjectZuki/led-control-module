@@ -76,6 +76,10 @@ CRGB led[NUM_LEDS];
 // delay threshold for flash duration in ms
 unsigned int DELAY_THRESHOLD = 100;
 
+// Non-blocking flash state for piezo-triggered flash
+volatile bool flashActive = false;
+unsigned long flashStartTime = 0;
+
 // =================================== RGB LED =================================
 
 #define LED_RED           5
@@ -141,7 +145,8 @@ unsigned long buttonDebounceDelay = 1000;     // debounce delay for button
 #define BLUE_ADDR         2
 #define JUMP3_ADDR        3
 #define JUMP7_ADDR        4
-#define PIEZO_THRESH_ADDR 5
+#define DIY1_ADDR         5
+#define PIEZO_THRESH_ADDR 6
 
 // ================================ PIEZO SENSOR ===============================
 
@@ -249,6 +254,8 @@ void loop() {
 
   // check for piezo sensor input
   piezo_trigger();
+  // handle non-blocking flash timeout
+  updateFlash();
   // update any active non-blocking trails
   updateTrails();
 }
@@ -418,6 +425,7 @@ void eeprom_read() {
   BLUE = EEPROM.read(BLUE_ADDR);
   jump3 = EEPROM.read(JUMP3_ADDR);
   jump7 = EEPROM.read(JUMP7_ADDR);
+  DIY1 = EEPROM.read(DIY1_ADDR);
   PIEZO_THRESH = EEPROM.read(PIEZO_THRESH_ADDR);
 }
 
@@ -438,6 +446,7 @@ void eeprom_save(int red, int green, int blue) {
   }
   if (EEPROM.read(JUMP3_ADDR) != jump3) EEPROM.write(JUMP3_ADDR, jump3);
   if (EEPROM.read(JUMP7_ADDR) != jump7) EEPROM.write(JUMP7_ADDR, jump7);
+  if (EEPROM.read(DIY1_ADDR) != DIY1) EEPROM.write(DIY1_ADDR, DIY1);
   if (EEPROM.read(PIEZO_THRESH_ADDR) != PIEZO_THRESH) EEPROM.write(PIEZO_THRESH_ADDR, PIEZO_THRESH);
 }
 
@@ -476,11 +485,22 @@ void piezo_trigger() {
       if (DIY1) {
         addTrail();
       } else {
-        // Flash LED
+        // Start a non-blocking flash: set flag and record start time
+        flashActive = true;
+        flashStartTime = millis();
         onARGB();
-        delay(DELAY_THRESHOLD);
-        offARGB();
       }
+  }
+}
+
+// Called frequently from loop() to handle flash timeout without blocking
+void updateFlash() {
+  if (!flashActive) return;
+
+  unsigned long now = millis();
+  if ((now - flashStartTime) >= DELAY_THRESHOLD) {
+    offARGB();
+    flashActive = false;
   }
 }
 
@@ -830,21 +850,6 @@ CRGB getColor() {
 }
 
 /**
- * @brief Creates a ripple effect on impact
- * 
- * This function will create a ripple effect on the ARGB LED strip each time the
- *  piezo sensor is hit.
- * 
- * TODO: Find way to end ripple effect or change color during effect.
- * 
- * @return N/A
- */
-void ripple() {
-  // Deprecated blocking ripple kept for reference. Use non-blocking addTrail()/updateTrails().
-  return;
-}
-
-/**
  * @brief Creates a rainbow effect
  * 
  * This function will create a rainbow effect on the ARGB LED strip.
@@ -854,8 +859,6 @@ void ripple() {
  * @return N/A
  */
 void rainbow_effect() {
-
-  /// TODO: Allow effect ONLY on piezo trigger (saves battery, saves components)
 
   static unsigned long previousMillis = 0; // Static to retain value between calls
   const int interval = 20; // Interval for color update
@@ -1034,19 +1037,18 @@ int processHexCode(int IRvalue) {
       break;
     // PWR
     case 0x40:
-      // disable IR Receiver
-      IrReceiver.disableIRIn();
-      // flash RGB LED red
-      for (int i = 0; i < 3; i++) {
-        analogWrite(LED_RED, 255);
-        analogWrite(LED_GREEN, 0);
-        analogWrite(LED_BLUE, 0);
-        delay(200);
-        analogWrite(LED_RED, RED);
-        analogWrite(LED_GREEN, BLUE);
-        analogWrite(LED_BLUE, GREEN);
-        delay(200);
-      }
+      // reset to default state
+      offARGB();
+      ledonrx = false;         // on/flash mode
+      rainboweffectrx = false; // rainbow effect
+      jump3 = false;           // rainbow colors
+      jump7 = false;           // rainbow2 colors
+      multicolor = false;      // multicolor effect
+      DIY1 = false;            // ripple effect
+      fade3 = false;           // fade off
+      fade7 = false;           // fade on AND off
+      flashConfirm(1);
+
       break;
 
     // ==================== row 2 | Color ==========================================
