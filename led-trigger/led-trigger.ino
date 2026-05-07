@@ -7,7 +7,7 @@
  *             LED colors based on an RGB IR remote.
  *
  * @author     Willie Alcaraz ([Project]Zuki)
- * @date       August 2025
+ * @date       2026
  * 
  * @note       Atmega328p
  *
@@ -162,13 +162,13 @@ volatile bool rainboweffectrx = false; // rainbow effect
 volatile bool jump3 = false;           // rainbow colors
 volatile bool jump7 = false;           // rainbow2 colors
 volatile bool multicolor = false;      // multicolor effect
-bool DIY1 = false;                     // ripple effect
+bool DIY1 = false;                     // chaser effect
 volatile bool fade3 = false;           // fade off
 volatile bool fade7 = false;           // fade on AND off
 
 // ================================ Trail Effect ===============================
 
-// For trail ripple effect
+// For trail chaser effect
 const int TRAIL_LENGTH = 15;
 const int TRAIL_MAX = 30;       // Maximum number of simultaneous trails
 
@@ -481,7 +481,7 @@ void piezo_trigger() {
 
       // Serial.println("Piezo triggered");
 
-      // If DIY1 (ripple mode) is enabled, add a trail instead of blocking flash
+      // If DIY1 (chaser mode) is enabled, add a trail instead of blocking flash
       if (DIY1) {
         addTrail();
       } else {
@@ -1044,7 +1044,7 @@ int processHexCode(int IRvalue) {
       jump3 = false;           // rainbow colors
       jump7 = false;           // rainbow2 colors
       multicolor = false;      // multicolor effect
-      DIY1 = false;            // ripple effect
+      DIY1 = false;            // chaser effect
       fade3 = false;           // fade off
       fade7 = false;           // fade on AND off
       flashConfirm(1);
@@ -1169,7 +1169,7 @@ int processHexCode(int IRvalue) {
     // ==================== row 9 | DIY 1-3, AUTO ====================================
 
 
-    // DIY1: toggle non-blocking ripple mode
+    // DIY1: toggle non-blocking chaser mode
     case 0xC:
     {
       DIY1 = !DIY1;
